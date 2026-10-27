@@ -5,7 +5,9 @@
 //   pad: stick       a floating joystick instead of the d-pad: touch anywhere on the left half of the screen and
 //                    slide (8 directions, diagonals included: walk + jump with one thumb)
 //   select: P        a 4th small button (SELECT) next to START
-//   labels: {a: JUMP, b: FIRE, start: START, select: PAUSE}   texts of the buttons
+//   labels: {a: JUMP, b: FIRE, start: START, select: PAUSE, rotate: 'TURN YOUR PHONE'}   texts
+//   fullscreen: false   do not go fullscreen (and landscape) at the first tap (jumphp.js)
+// A landscape game held upright asks the player to turn the phone (tap: play anyway).
 (function () {
 	'use strict';
 
@@ -97,6 +99,34 @@
 		zone.addEventListener('pointercancel', end);
 	}
 
+	// "turn your phone" over the game while the phone is upright (when the orientation lock is not possible)
+	function rotateHint(text) {
+		const hint = document.createElement('div');
+		hint.style.cssText = 'position:fixed;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;'
+			+ 'justify-content:center;gap:28px;background:rgba(0,0,0,.88);color:#fff;font:bold 18px monospace;'
+			+ 'text-align:center;padding:16px;touch-action:none;';
+		const phone = document.createElement('div');
+		phone.style.cssText = 'width:44px;height:76px;border:4px solid #fff;border-radius:8px;animation:jumphp-rotate 2s ease-in-out infinite;';
+		const label = document.createElement('div');
+		label.textContent = text;
+		hint.append(phone, label);
+		const css = document.createElement('style');
+		css.textContent = '@keyframes jumphp-rotate{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}';
+		document.head.appendChild(css);
+		document.body.appendChild(hint);
+		const portrait = matchMedia('(orientation: portrait)');
+		let dismissed = false;
+		const update = () => { hint.style.display = portrait.matches && !dismissed ? 'flex' : 'none'; };
+		portrait.addEventListener?.('change', () => { dismissed = false; update(); });
+		hint.addEventListener('pointerup', (e) => {
+			e.preventDefault();
+			window.JumPHP?.fullscreen?.(); // Android: fullscreen + landscape lock
+			dismissed = true;
+			update();
+		});
+		update();
+	}
+
 	function button(label, name, style) {
 		const b = document.createElement('div');
 		b.textContent = label;
@@ -117,6 +147,8 @@
 		if (!matchMedia('(pointer: coarse)').matches) return;
 		const cfg = Object.assign({ a: 'Space', b: 'Escape', start: 'Return' }, (window.JUMPHP_GAME || {}).touch || {});
 		const labels = Object.assign({ a: 'A', b: 'B', start: 'START', select: 'SELECT' }, cfg.labels || {});
+		const game = window.JUMPHP_GAME || {};
+		if ((game.width || 16) > (game.height || 9)) rotateHint(labels.rotate || 'TURN YOUR PHONE');
 		if (cfg.pad === 'stick') {
 			stick();
 		} else {

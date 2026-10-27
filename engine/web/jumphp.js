@@ -8,6 +8,7 @@ const GAME = window.JUMPHP_GAME || {};
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas');
+const TOUCH = matchMedia('(pointer: coarse)').matches;
 const loader = $('loader');
 const statusEl = $('status');
 const barEl = $('bar').firstElementChild;
@@ -199,16 +200,41 @@ async function main() {
 		overlay.style.display = 'none';
 		canvas.focus();
 		removeEventListener('keydown', start, true);
+		// phones: fullscreen + landscape at once (game.yaml `touch: {fullscreen: false}` turns it off)
+		if (TOUCH && (GAME.touch || {}).fullscreen !== false) enterFullscreen();
 	};
-	overlay.addEventListener('pointerdown', start, { once: true });
+	// a touch only allows fullscreen when the finger goes up (pointerup), a mouse when it goes down
+	overlay.addEventListener(TOUCH ? 'pointerup' : 'pointerdown', start, { once: true });
 	addEventListener('keydown', start, true);
 }
 
+// Fullscreen of the whole page (not only the canvas: the on-screen touch controls stay visible), then, on
+// phones, the screen is locked in the orientation of the game (Android; iOS has no lock: touch.js asks the
+// player to turn the phone)
+const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+function enterFullscreen() {
+	const root = document.documentElement;
+	const request = root.requestFullscreen || root.webkitRequestFullscreen;
+	if (!request || fullscreenElement()) return Promise.resolve();
+	return Promise.resolve(request.call(root, { navigationUI: 'hide' }))
+		.then(() => {
+			if (TOUCH && screen.orientation?.lock) {
+				return screen.orientation.lock((GAME.width || 16) >= (GAME.height || 9) ? 'landscape' : 'portrait');
+			}
+		})
+		.catch(() => {});
+}
+function exitFullscreen() {
+	const exit = document.exitFullscreen || document.webkitExitFullscreen;
+	if (exit && fullscreenElement()) Promise.resolve(exit.call(document)).catch(() => {});
+}
+window.JumPHP.fullscreen = enterFullscreen;
+
 $('btn-full').addEventListener('click', () => {
-	(document.fullscreenElement ? document.exitFullscreen() : canvas.requestFullscreen()).catch(() => {});
+	fullscreenElement() ? exitFullscreen() : enterFullscreen();
 	canvas.focus();
 });
-canvas.addEventListener('dblclick', () => canvas.requestFullscreen?.().catch(() => {}));
+canvas.addEventListener('dblclick', () => enterFullscreen());
 $('btn-sound').addEventListener('click', () => {
 	// SDL_mixer plays through emscripten's Web Audio context
 	const ctx = window.SDL2?.audioContext || window.Module?.SDL2?.audioContext;

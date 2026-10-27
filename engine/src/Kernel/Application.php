@@ -1,0 +1,247 @@
+<?php
+
+namespace JumPHP\Kernel;
+
+use JumPHP\Audio\SoundManager;
+use JumPHP\Bridge\JsBridge;
+use JumPHP\Debug\FpsCounter;
+use JumPHP\Entity\EntityManager;
+use JumPHP\Input\ActionMap;
+use JumPHP\Input\Gamepad;
+use JumPHP\Input\InputManager;
+use JumPHP\Input\Keyboard;
+use JumPHP\Input\Mouse;
+use JumPHP\Input\Touch;
+use JumPHP\Loop\GameLoop;
+use JumPHP\Physics\CollisionSystem;
+use JumPHP\Renderer\BitmapFont;
+use JumPHP\Renderer\Sdl;
+use JumPHP\Save\Options;
+use JumPHP\Save\Storage;
+use JumPHP\Scene\Scene;
+use JumPHP\Scene\SceneManager;
+use JumPHP\Tile\TileMapRenderer;
+use JumPHP\Util\Lang;
+use React\EventLoop\Loop;
+use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\DependencyInjection\Reference;
+
+/**
+ * Boots a game. The game's app.php (desktop) and the page (browser) both go through here:
+ *
+ *   exit(JumPHP\Kernel\Application::boot(__DIR__)->run());   // app.php
+ *
+ * Desktop: run() blocks until the window closes. Browser: boot() returns, then the page calls
+ * jumphp_frame() -> frame() at each requestAnimationFrame.
+ *
+ * Headless modes (no window, fixed 1/60 s frames), driven by environment variables:
+ *   JUMPHP_SMOKE=1        run JUMPHP_MAX_FRAMES frames (default 600), any PHP warning is fatal (exit 1)
+ *   JUMPHP_SCREENSHOT=f   run the frames then save the last one as a PNG (JUMPHP_SHOT_EVERY=n: one every n frames)
+ *   JUMPHP_INPUT=json     scripted input: [[frame, "action"], [frame, "action", "hold"|"release"], ...]
+ *   JUMPHP_SCENE=Class    first scene (JUMPHP_SCENE_PARAMS={"json":1})
+ *   JUMPHP_REALTIME=1     headless frames paced in real time (network tests between two processes)
+ */
+final class Application
+{
+    public const CACHED_CONTAINER_CLASS = 'JumPHPCachedContainer';
+
+    public Engine $engine;
+    private ?\Throwable $crash = null;
+    private int $exitCode = 0;
+    private array $script = [];
+
+    private function __construct(public readonly ContainerInterface $container, public readonly GameConfig $config)
+    {
+    }
+
+    public static function boot(string $root): self
+    {
+        $root = rtrim($root, '/');
+        if (!defined('JUMPHP_ROOT')) {
+            define('JUMPHP_ROOT', $root);
+        }
+        if (Platform::setting('JUMPHP_SMOKE') !== null) {
+            set_error_handler(static function (int $level, string $message, string $file, int $line): bool {
+                if (!(error_reporting() & $level)) {
+                    return false;
+                }
+                throw new \ErrorException($message, 0, $level, $file, $line);
+            });
+        }
+        if (Platform::isHeadless()) {
+            putenv('SDL_VIDEODRIVER=dummy');
+            putenv('SDL_AUDIODRIVER=dummy');
+        }
+
+        $config = GameConfig::load($root);
+        $container = self::loadContainer($root, $config);
+        $app = new self($container, $config);
+        $app->engine = $container->get(Engine::class);
+        $app->engine->scenes->setResolver(static function (string $class) use ($container): Scene {
+            if ($container->has($class)) {
+                return $container->get($class);
+            }
+            if (!class_exists($class)) {
+                throw new \RuntimeException("Scene class '$class' not found (namespace / file name?)");
+            }
+            return new $class();
+        });
+        if (Platform::isHeadless()) {
+            $app->engine->fixedDelta = 1 / 60;
+            $app->script = json_decode((string)Platform::setting('JUMPHP_INPUT', '[]'), true) ?: [];
+        }
+        $app->engine->boot();
+
+        if (Platform::isDesktop()) {
+            // headless frames run as fast as possible, unless JUMPHP_REALTIME=1 (network tests: real seconds)
+            $interval = Platform::isHeadless() && !Platform::setting('JUMPHP_REALTIME') ? 0.0 : 1 / max(1, (int)$config->get('max_fps'));
+            $app->engine->gameLoop->addPeriodicTimer($interval, fn () => $app->tickDesktop());
+        }
+        return $app;
+    }
+
+    /** Browser: one frame (called by jumphp_frame()). */
+    public function frame(): void
+    {
+        if ($this->crash !== null) {
+            $this->renderCrash();
+            return;
+        }
+        try {
+            $this->engine->frame();
+        } catch (\Throwable $e) {
+            $this->crashed($e);
+        }
+    }
+
+    /** Desktop: runs until the game quits. @return int exit code */
+    public function run(): int
+    {
+        $this->engine->gameLoop->start();
+        if ($this->crash === null) {
+            $this->engine->sound->close();
+            $this->engine->sdl->quit();
+        }
+        return $this->exitCode;
+    }
+
+    private function tickDesktop(): void
+    {
+        try {
+            $frame = $this->engine->frameCount();
+            foreach ($this->script as $step) {
+                if ((int)$step[0] === $frame) {
+                    $mode = $step[2] ?? 'press';
+                    $mode === 'press' ? $this->engine->actions->press((string)$step[1])
+                        : $this->engine->actions->hold((string)$step[1], $mode === 'hold');
+                }
+            }
+            $this->engine->tick();
+            if (!$this->engine->isRunning()) {
+                $this->engine->gameLoop->stop();
+                return;
+            }
+            if (Platform::isHeadless()) {
+                $this->headlessFrameDone();
+            } elseif (($max = (int)Platform::setting('JUMPHP_MAX_FRAMES', 0)) > 0 && $this->engine->frameCount() >= $max) {
+                fwrite(STDERR, "[jumphp] stopped after $max frames (JUMPHP_MAX_FRAMES)\n");
+                $this->engine->quit();
+            }
+        } catch (\Throwable $e) {
+            $this->crashed($e);
+            $this->engine->gameLoop->stop();
+        }
+    }
+
+    private function headlessFrameDone(): void
+    {
+        $frame = $this->engine->frameCount();
+        $shot = Platform::setting('JUMPHP_SCREENSHOT');
+        $every = (int)Platform::setting('JUMPHP_SHOT_EVERY', 0);
+        $max = (int)Platform::setting('JUMPHP_MAX_FRAMES', $shot !== null ? 120 : 600);
+        if ($shot !== null && $every > 0 && $frame % $every === 0) {
+            $this->engine->sdl->saveScreenshot(preg_replace('/\.png$/', '', (string)$shot) . sprintf('-%05d.png', $frame));
+        }
+        if ($frame >= $max) {
+            if ($shot !== null) {
+                $this->engine->sdl->saveScreenshot((string)$shot);
+                fwrite(STDERR, "[jumphp] screenshot: $shot (frame $frame)\n");
+            } else {
+                fwrite(STDERR, "[jumphp] smoke test OK: $frame frames, scene " . get_class($this->engine->scenes->current() ?? $this) . "\n");
+            }
+            $this->engine->gameLoop->stop();
+        }
+    }
+
+    private function crashed(\Throwable $e): void
+    {
+        $this->crash = $e;
+        $this->exitCode = 1;
+        fwrite(STDERR, "[jumphp] CRASH: " . get_class($e) . ': ' . $e->getMessage() . "\n" . $e->getFile() . ':' . $e->getLine()
+            . "\n" . $e->getTraceAsString() . "\n");
+        if (Platform::isWasm()) {
+            $this->renderCrash();
+        }
+    }
+
+    /** Browser: the error on screen instead of a frozen picture. */
+    private function renderCrash(): void
+    {
+        try {
+            $r = $this->engine->sdl->getRenderer();
+            $font = new BitmapFont($this->engine->sdl);
+            $r->beginFrame([90, 0, 0]);
+            $msg = wordwrap(get_class($this->crash) . ': ' . $this->crash->getMessage(), (int)max(10, $r->getWidth() / 6 - 2), "\n", true);
+            $where = basename($this->crash->getFile()) . ':' . $this->crash->getLine();
+            $font->draw($r, "CRASH\n\n" . $msg . "\n\n" . $where . "\n\nSEE THE BROWSER CONSOLE", 4, 4, 1, [255, 255, 255]);
+            $r->endFrame();
+        } catch (\Throwable) {
+        }
+    }
+
+    // --- service container -------------------------------------------------------------------------
+
+    private static function loadContainer(string $root, GameConfig $config): ContainerInterface
+    {
+        $cached = $root . '/cache/container.php';
+        if (Platform::setting('JUMPHP_CONTAINER_CACHE') && is_file($cached)) {
+            require_once $cached;
+            $class = self::CACHED_CONTAINER_CLASS;
+            $container = new $class();
+        } else {
+            $container = self::buildContainer($root);
+            $container->compile();
+        }
+        $container->set(GameConfig::class, $config);
+        return $container;
+    }
+
+    /** The engine services + the game's config/services.yaml (not compiled: tools/dump-container.php dumps it). */
+    public static function buildContainer(string $root): ContainerBuilder
+    {
+        $c = new ContainerBuilder();
+        // scenes are fetched by class name: public, one instance each (reset in enter())
+        $c->registerForAutoconfiguration(Scene::class)->setPublic(true)->setShared(true);
+
+        $c->register(GameConfig::class)->setSynthetic(true)->setPublic(true);
+        foreach ([GameLoop::class, Sdl::class, Keyboard::class, Mouse::class, Touch::class, Gamepad::class, ActionMap::class,
+                     InputManager::class, SceneManager::class, SoundManager::class, Options::class, JsBridge::class,
+                     FpsCounter::class, TileMapRenderer::class, BitmapFont::class] as $class) {
+            $c->autowire($class)->setPublic(true);
+        }
+        $c->register(Storage::class)->setFactory([Storage::class, 'fromConfig'])->addArgument(new Reference(GameConfig::class))->setPublic(true);
+        $c->register(Lang::class)->setFactory([Lang::class, 'fromConfig'])->addArgument(new Reference(GameConfig::class))->setPublic(true);
+        // one per scene that asks for it
+        $c->autowire(CollisionSystem::class)->setShared(false)->setPublic(true);
+        $c->autowire(EntityManager::class)->setShared(false)->setPublic(true);
+        $c->autowire(Engine::class)->setPublic(true);
+
+        if (is_file($root . '/config/services.yaml')) {
+            (new YamlFileLoader($c, new FileLocator($root . '/config')))->load('services.yaml');
+        }
+        return $c;
+    }
+}

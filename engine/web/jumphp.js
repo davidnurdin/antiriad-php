@@ -1,0 +1,219 @@
+// JumPHP browser runtime: downloads the engine (php-web.wasm) and the game (php-web.data), restores the
+// player's files (IndexedDB), boots PHP and lets it run one frame per requestAnimationFrame.
+//
+// URL parameters: ?net=wss://host/ws (relay server) &room=ABCD &lang=fr &debug=1 &back=<url> (where "quit" goes)
+// Embedding (games portal): the page posts {type: 'jumphp:ready' | 'jumphp:quit' | 'jumphp:bridge', ...}
+// to window.parent; window.JumPHP.onBridge(message) receives the game's custom JsBridge messages.
+const GAME = window.JUMPHP_GAME || {};
+const params = new URLSearchParams(location.search);
+const $ = (id) => document.getElementById(id);
+const canvas = $('canvas');
+const loader = $('loader');
+const statusEl = $('status');
+const barEl = $('bar').firstElementChild;
+const SAVE_DIR = '/game/var';
+const BRIDGE_FILE = '/tmp/jumphp-bridge';
+const lastLines = [];
+
+window.JumPHP = window.JumPHP || { onBridge: null, FS: null };
+
+// SDL's GLES2 renderer calls glCheckFramebufferStatus at each SDL_SetRenderTarget: in WebGL that waits for
+// the GPU (up to 65 % of a frame). Our targets are always complete. And emscripten enables every WebGL
+// extension at start (100-250 ms each for some): only those SDL uses.
+const GL_EXTENSIONS = ['ANGLE_instanced_arrays', 'OES_vertex_array_object', 'WEBGL_draw_buffers', 'OES_element_index_uint', 'OES_standard_derivatives'];
+for (const ctx of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+	if (!ctx) continue;
+	ctx.prototype.checkFramebufferStatus = function () { return 0x8CD5; };
+	const supported = ctx.prototype.getSupportedExtensions;
+	ctx.prototype.getSupportedExtensions = function () {
+		return (supported.call(this) || []).filter((name) => GL_EXTENSIONS.includes(name));
+	};
+}
+
+const setStatus = (text) => { statusEl.textContent = text; };
+const setProgress = (ratio) => { barEl.style.width = `${Math.round(Math.max(0, Math.min(1, ratio)) * 100)}%`; };
+const fail = (text) => { loader.style.display = 'flex'; loader.classList.add('error'); setStatus(text); };
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+const notifyParent = (message) => { if (window.parent !== window) window.parent.postMessage(message, '*'); };
+
+// version.json (always fetched fresh): content hashes, so a new build is never hidden by an old cache
+const version = await fetch('version.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+const versioned = (file) => (version[file] ? `${file}?v=${version[file]}` : file);
+
+async function cachedFetch(url) {
+	let cache = null;
+	try { cache = await caches.open('jumphp-' + (GAME.id || 'game')); } catch (e) { /* private mode, http */ }
+	const hit = cache && await cache.match(url).catch(() => null);
+	if (hit) return hit;
+	const response = await fetch(url);
+	if (cache && response.ok && url.includes('?v=')) {
+		try {
+			const file = url.split('?')[0];
+			for (const old of await cache.keys()) if (new URL(old.url).pathname.endsWith('/' + file)) await cache.delete(old);
+			await cache.put(url, response.clone());
+		} catch (e) { console.warn('[cache]', e); }
+	}
+	return response;
+}
+
+async function fetchWithProgress(url, onProgress) {
+	const response = await cachedFetch(url);
+	if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+	const total = Number(document.querySelector('meta[name="php-wasm-size"]')?.content) || 0;
+	if (!response.body || !total) return response.arrayBuffer();
+	const reader = response.body.getReader();
+	const chunks = [];
+	let received = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		received += value.length;
+		onProgress(received / total);
+	}
+	const bytes = new Uint8Array(received);
+	let offset = 0;
+	for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+	return bytes.buffer;
+}
+
+// a page value inside PHP code: base64 (in a PHP string, "$" or "{$" would run code)
+const phpString = (v) => `base64_decode('${btoa(unescape(encodeURIComponent(v == null ? '' : String(v))))}')`;
+
+function prelude() {
+	const isMobile = matchMedia('(pointer: coarse)').matches;
+	const lang = params.get('lang') || (navigator.language || 'en').slice(0, 2).toLowerCase();
+	const lines = [
+		`define('JUMPHP_WASM', true);`,
+		`define('JUMPHP_CONTAINER_CACHE', true);`,
+		`define('JUMPHP_MOBILE', ${isMobile ? 'true' : 'false'});`,
+		`define('JUMPHP_LANG', ${phpString(lang)});`,
+		`define('JUMPHP_ROOM', ${phpString((params.get('room') || '').toUpperCase())});`,
+		`define('JUMPHP_DEBUG', ${params.get('debug') === '1' ? 'true' : 'false'});`,
+	];
+	const net = params.get('net') || GAME.net_url;
+	if (net) lines.push(`define('JUMPHP_NET_URL', ${phpString(net)});`);
+	return lines.join('\n') + `\nrequire '/game/vendor/jumphp/engine/bootstrap/wasm.php';\n`;
+}
+
+// the game's messages (JumPHP\Bridge\JsBridge): one JSON line each
+function pollBridge(FS) {
+	let text = '';
+	try {
+		if (!FS.analyzePath(BRIDGE_FILE).exists) return;
+		text = FS.readFile(BRIDGE_FILE, { encoding: 'utf8' });
+		FS.unlink(BRIDGE_FILE);
+	} catch (e) { return; }
+	for (const line of text.split('\n')) {
+		let msg;
+		try { msg = JSON.parse(line); } catch (e) { continue; }
+		if (msg.t === 'open' && /^https?:\/\//.test(msg.url || '')) {
+			window.open(msg.url, '_blank', 'noopener');
+		} else if (msg.t === 'quit') {
+			notifyParent({ type: 'jumphp:quit', game: GAME.id });
+			window.saveUserFiles?.();
+			const back = params.get('back');
+			if (back && /^https?:\/\//.test(back)) location.href = back;
+			else { $('overlay').querySelector('p').textContent = 'THANKS FOR PLAYING'; $('overlay').style.display = 'flex'; }
+		} else if (msg.t === 'share' && navigator.share) {
+			navigator.share({ title: GAME.title, text: msg.text || '', url: msg.url || location.href }).catch(() => {});
+		} else {
+			notifyParent({ type: 'jumphp:bridge', game: GAME.id, message: msg });
+			window.JumPHP.onBridge?.(msg);
+		}
+	}
+}
+
+async function main() {
+	const { default: createPhpModule } = await import('./' + versioned('php-web.mjs'));
+
+	setStatus('Downloading the engine...');
+	const wasmBinary = await fetchWithProgress(versioned('php-web.wasm'), (r) => setProgress(r * 0.45));
+
+	setStatus('Loading the game...');
+	const { ccall, FS } = await createPhpModule({
+		canvas,
+		wasmBinary,
+		locateFile: (path, prefix) => (path === 'php-web.data' ? versioned(path) : prefix + path),
+		setStatus(text) {
+			const m = /\((\d+)\/(\d+)\)/.exec(text || '');
+			if (m) setProgress(0.45 + 0.45 * Number(m[1]) / Number(m[2]));
+		},
+		print(text) { console.log(text); },
+		printErr(text) {
+			// emscripten noise: PHP maps its scripts with mmap, MEMFS cannot unmap them (harmless)
+			if (!text || /munmap\(\) failed/.test(text)) return;
+			console.error(text);
+			lastLines.push(String(text));
+			if (lastLines.length > 8) lastLines.shift();
+		},
+		onAbort(reason) { fail('The engine crashed: ' + reason); },
+	});
+	window.JumPHP.FS = FS;
+
+	// the player's files (saves, options): var/ of the game lives in IndexedDB
+	setStatus('Restoring saves...');
+	setProgress(0.93);
+	FS.mkdirTree(SAVE_DIR);
+	FS.mount(FS.filesystems.IDBFS, {}, SAVE_DIR);
+	let syncing = false;
+	const syncfs = (populate) => new Promise((resolve) => {
+		if (syncing && !populate) return resolve();
+		syncing = true;
+		FS.syncfs(populate, (err) => { syncing = false; if (err) console.error('[save]', err); resolve(); });
+	});
+	await syncfs(true);
+	window.saveUserFiles = () => syncfs(false);
+	setInterval(window.saveUserFiles, 2000);
+	addEventListener('pagehide', window.saveUserFiles);
+	document.addEventListener('visibilitychange', () => document.hidden && window.saveUserFiles());
+
+	setStatus('Starting...');
+	setProgress(1);
+	await nextFrame();
+	await nextFrame();
+
+	try {
+		ccall('phpw_run', 'void', ['string'], [prelude()]);
+		// back without "unwind": jumphp_frame() was never reached (the boot failed)
+		fail('The game did not start:\n' + (lastLines.join('\n') || 'see the browser console'));
+		return;
+	} catch (e) {
+		// emscripten_set_main_loop(..., simulate_infinite_loop) throws "unwind": the normal case
+		if (e !== 'unwind' && !(e && e.name === 'ExitStatus')) {
+			fail(e && e.message ? e.message : String(e));
+			throw e;
+		}
+	}
+
+	await nextFrame();
+	loader.style.display = 'none';
+	setInterval(() => pollBridge(FS), 250);
+	window.JumPHPTouch?.start();
+	notifyParent({ type: 'jumphp:ready', game: GAME.id });
+
+	// browsers start audio and keyboard focus after a user gesture: one click / tap / key on the overlay
+	const overlay = $('overlay');
+	overlay.style.display = 'flex';
+	const start = () => {
+		overlay.style.display = 'none';
+		canvas.focus();
+		removeEventListener('keydown', start, true);
+	};
+	overlay.addEventListener('pointerdown', start, { once: true });
+	addEventListener('keydown', start, true);
+}
+
+$('btn-full').addEventListener('click', () => {
+	(document.fullscreenElement ? document.exitFullscreen() : canvas.requestFullscreen()).catch(() => {});
+	canvas.focus();
+});
+canvas.addEventListener('dblclick', () => canvas.requestFullscreen?.().catch(() => {}));
+$('btn-sound').addEventListener('click', () => {
+	// SDL_mixer plays through emscripten's Web Audio context
+	const ctx = window.SDL2?.audioContext || window.Module?.SDL2?.audioContext;
+	if (ctx) ctx.state === 'running' ? ctx.suspend() : ctx.resume();
+	canvas.focus();
+});
+
+main().catch((e) => { console.error(e); fail(e && e.message ? e.message : String(e)); });

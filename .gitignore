@@ -1,0 +1,12 @@
+/build/
+/.build/
+/.cache/
+/.env
+/engine/vendor/
+/engine/composer.lock
+/engine/.phpunit.cache/
+/games/*/vendor/
+/games/*/var/*
+!/games/*/var/.gitkeep
+/games/*/dist/
+/games/*/cache/

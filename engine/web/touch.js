@@ -130,13 +130,26 @@
 		const small = labels.a.length > 2 || labels.b.length > 2 ? 'font-size:12px;' : '';
 		button(labels.a, cfg.a, r + small + 'right:20px;bottom:40px;');
 		button(labels.b, cfg.b, r + small + 'right:104px;bottom:24px;');
-		const pill = 'padding:6px 12px;border-radius:8px;bottom:12px;font-size:12px;';
-		if (cfg.select) {
-			button(labels.select, cfg.select, pill + 'left:50%;transform:translateX(-110%);');
-			button(labels.start, cfg.start, pill + 'left:50%;transform:translateX(10%);');
-		} else {
-			button(labels.start, cfg.start, pill + 'left:50%;transform:translateX(-50%);');
-		}
+		const pill = 'padding:6px 12px;border-radius:8px;font-size:12px;';
+		const pills = [];
+		if (cfg.select) pills.push(button(labels.select, cfg.select, pill));
+		pills.push(button(labels.start, cfg.start, pill));
+		// bottom centre; on narrow (portrait) screens the bottom is full: top left
+		const place = () => {
+			const narrow = innerWidth < 600;
+			let x = 8;
+			pills.forEach((b, i) => {
+				if (narrow) {
+					Object.assign(b.style, { top: '8px', bottom: 'auto', left: x + 'px', transform: 'none' });
+					x += b.offsetWidth + 8;
+				} else {
+					const shift = pills.length === 1 ? '-50%' : (i === 0 ? '-110%' : '10%');
+					Object.assign(b.style, { top: 'auto', bottom: '12px', left: '50%', transform: `translateX(${shift})` });
+				}
+			});
+		};
+		place();
+		addEventListener('resize', place);
 		// the SOUND / FULLSCREEN toolbar would sit under the A / B buttons: move it to the top
 		const toolbar = document.getElementById('toolbar');
 		if (toolbar) { toolbar.style.bottom = 'auto'; toolbar.style.top = '8px'; }

@@ -9,7 +9,7 @@ require '/game/vendor/autoload.php';
 try {
     $GLOBALS['app'] = \JumPHP\Kernel\Application::boot('/game');
 } catch (\Throwable $e) {
-    fwrite(STDERR, '[jumphp] BOOT FAILED: ' . get_class($e) . ': ' . $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ")\n"
+    \JumPHP\Kernel\Application::stderr('[jumphp] BOOT FAILED: ' . get_class($e) . ': ' . $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ")\n"
         . $e->getTraceAsString() . "\n");
     return;
 }

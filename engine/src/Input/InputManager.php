@@ -36,17 +36,28 @@ class InputManager extends EventEmitter
                     $this->keyboard->handle($event);
                     break;
                 case \SDL_MOUSEMOTION:
-                    $this->moveMouse($renderer, $event->motion->x, $event->motion->y);
+                    if ($event->motion !== null) {
+                        $this->moveMouse($renderer, $event->motion->x, $event->motion->y);
+                    } else {
+                        $this->mouseFromState($renderer, null);
+                    }
                     break;
                 case \SDL_MOUSEBUTTONDOWN:
                 case \SDL_MOUSEBUTTONUP:
-                    $this->moveMouse($renderer, $event->button->x, $event->button->y);
-                    $event->type === \SDL_MOUSEBUTTONDOWN ? $this->mouse->down($event->button->button) : $this->mouse->up($event->button->button);
+                    $down = $event->type === \SDL_MOUSEBUTTONDOWN;
+                    if ($event->button !== null) {
+                        $this->moveMouse($renderer, $event->button->x, $event->button->y);
+                        $down ? $this->mouse->down($event->button->button) : $this->mouse->up($event->button->button);
+                    } else {
+                        $this->mouseFromState($renderer, $down);
+                    }
                     break;
                 case \SDL_FINGERDOWN:
                 case \SDL_FINGERUP:
                 case \SDL_FINGERMOTION:
-                    $this->touch->handle($event);
+                    if ($event->tfinger !== null) {
+                        $this->touch->handle($event);
+                    }
                     break;
                 case \SDL_JOYBUTTONDOWN:
                 case \SDL_JOYBUTTONUP:
@@ -57,11 +68,41 @@ class InputManager extends EventEmitter
                     $this->gamepad->open();
                     break;
                 case \SDL_WINDOWEVENT:
-                    if ($event->window->event === \SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    if ($event->window !== null && $event->window->event === \SDL_WINDOWEVENT_SIZE_CHANGED) {
                         $this->emit('resize', [$event->window->data1, $event->window->data2]);
                     }
                     break;
             }
+        }
+    }
+
+    /**
+     * Some builds of the binding (the browser one) give no button / motion data with the mouse events:
+     * read the position and the buttons from SDL_GetMouseState() instead.
+     * @param bool|null $down true: a button went down, false: up, null: a move
+     */
+    private function mouseFromState(?Renderer $renderer, ?bool $down): void
+    {
+        $x = 0;
+        $y = 0;
+        $mask = (int)\SDL_GetMouseState($x, $y);
+        $this->moveMouse($renderer, (float)$x, (float)$y);
+        if ($down === null) {
+            return;
+        }
+        $changed = false;
+        for ($button = 1; $button <= 5; $button++) {
+            $isDown = ($mask & (1 << ($button - 1))) !== 0;
+            if ($down && $isDown && !$this->mouse->isHeld($button)) {
+                $this->mouse->down($button);
+                $changed = true;
+            } elseif (!$down && !$isDown && $this->mouse->isHeld($button)) {
+                $this->mouse->up($button);
+                $changed = true;
+            }
+        }
+        if (!$changed) { // no button information at all: the left button
+            $down ? $this->mouse->down(1) : $this->mouse->up(1);
         }
     }
 

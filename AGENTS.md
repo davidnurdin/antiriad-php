@@ -182,7 +182,7 @@ Replace its scenes and entities with your game:
    | `net_url` | ws://localhost:8090/ws | relay server |
    | `smoke` | | `{scene: ..., params: {...}}` run 600 frames by `bin/jumphp test`: make it a self-playing demo |
    | `online` | false | the game has online play (shown by the portal) |
-   | `touch` | | phone pad keys: `{a: Space, b: Escape, start: Return}` |
+   | `touch` | | phone pad keys: `{a: Space, b: Escape, start: Return}`; optional `pad: stick` (floating joystick, 8 directions), `select: P` (4th button), `labels: {a: JUMP, ...}` |
    | `controls` | | one line of help text shown by the web page / portal |
    | `debug_key`, `fullscreen_key` | F3, F11 | |
 2. **`config/input.yaml`**: your actions (`jump`, `fire`, `p1_up`...). The engine already defines

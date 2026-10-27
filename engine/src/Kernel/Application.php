@@ -147,7 +147,7 @@ final class Application
             if (Platform::isHeadless()) {
                 $this->headlessFrameDone();
             } elseif (($max = (int)Platform::setting('JUMPHP_MAX_FRAMES', 0)) > 0 && $this->engine->frameCount() >= $max) {
-                fwrite(STDERR, "[jumphp] stopped after $max frames (JUMPHP_MAX_FRAMES)\n");
+                self::stderr("[jumphp] stopped after $max frames (JUMPHP_MAX_FRAMES)\n");
                 $this->engine->quit();
             }
         } catch (\Throwable $e) {
@@ -168,11 +168,20 @@ final class Application
         if ($frame >= $max) {
             if ($shot !== null) {
                 $this->engine->sdl->saveScreenshot((string)$shot);
-                fwrite(STDERR, "[jumphp] screenshot: $shot (frame $frame)\n");
+                self::stderr("[jumphp] screenshot: $shot (frame $frame)\n");
             } else {
-                fwrite(STDERR, "[jumphp] smoke test OK: $frame frames, scene " . get_class($this->engine->scenes->current() ?? $this) . "\n");
+                self::stderr("[jumphp] smoke test OK: $frame frames, scene " . get_class($this->engine->scenes->current() ?? $this) . "\n");
             }
             $this->engine->gameLoop->stop();
+        }
+    }
+
+    /** STDERR is not defined in the browser build: php://stderr goes to the console there. */
+    public static function stderr(string $message): void
+    {
+        $stream = defined('STDERR') ? STDERR : @fopen('php://stderr', 'w');
+        if ($stream) {
+            fwrite($stream, $message);
         }
     }
 
@@ -180,7 +189,7 @@ final class Application
     {
         $this->crash = $e;
         $this->exitCode = 1;
-        fwrite(STDERR, "[jumphp] CRASH: " . get_class($e) . ': ' . $e->getMessage() . "\n" . $e->getFile() . ':' . $e->getLine()
+        self::stderr("[jumphp] CRASH: " . get_class($e) . ': ' . $e->getMessage() . "\n" . $e->getFile() . ':' . $e->getLine()
             . "\n" . $e->getTraceAsString() . "\n");
         if (Platform::isWasm()) {
             $this->renderCrash();

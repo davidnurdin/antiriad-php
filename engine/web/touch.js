@@ -3,7 +3,8 @@
 // Shown only on touch screens. Keys of the buttons: game.yaml `touch: {a: Space, b: Escape, start: Return}`.
 // Options (all optional, the defaults keep the classic d-pad):
 //   pad: stick       a floating joystick instead of the d-pad: touch anywhere on the left half of the screen and
-//                    slide (8 directions, diagonals included: walk + jump with one thumb)
+//                    slide (8 directions, diagonals included: walk + jump with one thumb); a short tap there
+//                    without sliding is a mouse click on the game
 //   select: P        a 4th small button (SELECT) next to START
 //   labels: {a: JUMP, b: FIRE, start: START, select: PAUSE, rotate: 'TURN YOUR PHONE'}   texts
 //   fullscreen: false   do not go fullscreen (and landscape) at the first tap (jumphp.js)
@@ -39,6 +40,16 @@
 		if (!down && held[name] <= 0) { held[name] = 0; send('keyup', name); }
 	}
 
+	// a mouse click on the canvas at a page position (SDL reads the position from the move, then the button)
+	function click(x, y) {
+		const canvas = document.getElementById('canvas');
+		if (!canvas) return;
+		const opts = { clientX: x, clientY: y, screenX: x, screenY: y, button: 0, bubbles: true, cancelable: true };
+		canvas.dispatchEvent(new MouseEvent('mousemove', opts));
+		canvas.dispatchEvent(new MouseEvent('mousedown', Object.assign({ buttons: 1 }, opts)));
+		setTimeout(() => canvas.dispatchEvent(new MouseEvent('mouseup', Object.assign({ buttons: 0 }, opts))), 80);
+	}
+
 	// floating joystick: the left half of the screen; the touch point is the centre, the slide gives the directions
 	function stick() {
 		const DEAD = 18, MAX = 50;
@@ -53,7 +64,7 @@
 		base.appendChild(knob);
 		document.body.appendChild(zone);
 		document.body.appendChild(base);
-		let id = null, cx = 0, cy = 0, dirs = {};
+		let id = null, cx = 0, cy = 0, t0 = 0, moved = false, dirs = {};
 		const setDirs = (next) => {
 			for (const d of ['Left', 'Right', 'Up', 'Down']) {
 				if (!!next[d] !== !!dirs[d]) key(d, !!next[d]);
@@ -63,6 +74,7 @@
 		const move = (x, y) => {
 			let dx = x - cx, dy = y - cy;
 			const len = Math.hypot(dx, dy);
+			if (len > DEAD) moved = true;
 			if (len > MAX) { dx = dx * MAX / len; dy = dy * MAX / len; }
 			knob.style.transform = `translate(${dx}px,${dy}px)`;
 			const next = {};
@@ -83,6 +95,8 @@
 			base.style.left = '90px';
 			base.style.top = 'calc(100% - 110px)';
 			setDirs({});
+			// a short tap without sliding is not for the joystick: a click on the game under it (menus, buttons)
+			if (!moved && e.type === 'pointerup' && performance.now() - t0 < 350) click(cx, cy);
 		};
 		zone.addEventListener('pointerdown', (e) => {
 			if (id !== null) return;
@@ -90,6 +104,8 @@
 			id = e.pointerId;
 			zone.setPointerCapture?.(id);
 			cx = e.clientX; cy = e.clientY;
+			t0 = performance.now();
+			moved = false;
 			base.style.left = cx + 'px';
 			base.style.top = cy + 'px';
 			move(cx, cy);

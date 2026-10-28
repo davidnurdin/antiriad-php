@@ -167,6 +167,7 @@ seulement dans `var/`.
 - [docs/async.md](docs/async.md) : threads avec TrueAsync, runtime async, état du navigateur
 - [docs/api-web.md](docs/api-web.md) : OpenGL / WebGL, son 3D (OpenAL), mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
+- [docs/cpc.md](docs/cpc.md) : refaire un jeu Amstrad CPC depuis sa disquette, avec [dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp)
 - [docs/portail.md](docs/portail.md) : le futur site qui regroupera les jeux
 
 ---
@@ -322,3 +323,4 @@ integers, network only through `JumPHP\Net`, write files only into `var/`.
 - [docs/tutorial.md](docs/tutorial.md): the tutorial from A to Z
 - [AGENTS.md](AGENTS.md): the complete guide (English), for humans and AIs alike
 - [docs/](docs/): architecture, build, browser pitfalls, tiles and collisions, network, porting, portal (French)
+- [dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp): remake an Amstrad CPC game from its disc (emulator, extraction tools, AI skill)

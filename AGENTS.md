@@ -715,7 +715,34 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 | `ThreadTransferException`, `Cannot transfer a resource between threads` | a reference, a resource or an object with dynamic properties was sent to a thread (as an argument or a captured `use` variable): plain values only |
 | The game freezes while threads work | a busy loop on `isDone()`, or raw `Async\ThreadPool::submit()` with a full queue: use `JumPHP\Async\Pool` (never blocks) |
 
-## 12. Reference
+## 12. Remaking a game from its original disc (Amstrad CPC)
+
+When the user wants an existing **Amstrad CPC** game remade "with the same assets, music, sprites" from a
+`.dsk` file: use **[dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp)**. It already has everything — a
+headless CPC 6128 emulator that runs the game and logs it (screenshots, memory dumps, watched writes, AY sound
+log, keys, pokes, ROM or boot-sector boot), DSK / dump / Z80 / sound tools, the method step by step, and a
+whole game done this way. **Do not write an emulator, a disassembler or a DSK reader yourself.**
+
+```bash
+git clone https://github.com/davidnurdin/dsk2jumphp.git <somewhere outside the project> && make -C <it> test
+mkdir -p .claude/skills && ln -s <it>/.claude/skills/dsk2jumphp .claude/skills/dsk2jumphp   # the skill
+```
+
+Then read its `AGENTS.md` and `docs/method.md`. In short:
+- run the game in its emulator and look at the screenshots; find variables by diffing dumps and watching
+  writes; read code only around the PCs the logs give; steer the game with keys and pokes;
+- extract with its tools: palette, tiles and sprites (PNG, pen 0 transparent, mode 0 pixels 2 wide), font,
+  maps rebuilt from write logs (JSON), music and effects from the AY log (Ogg);
+- keep the extraction reproducible in the game: `games/<id>/tools/extract/` (scripts + README of the
+  addresses + a script that rebuilds `assets/` from the .dsk path); **never commit the .dsk, CPC ROMs or dumps**;
+  ROMs only when the game needs the firmware, from the user's machine (ask), never downloaded;
+- write the game in readable PHP with the original's screen size, rules and timings (50 Hz frames), and check
+  it side by side with the emulator (`cpc -s` vs `bin/jumphp shot`).
+
+Example: the Rainbow Islands remake, https://github.com/davidnurdin/rainbow-island (its `tools/extract/`), and
+`examples/rainbow-islands/` in dsk2jumphp.
+
+## 13. Reference
 
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
@@ -726,4 +753,5 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 - `skeleton/` — platformer: tiles, slopes, one-way platforms, camera, coins, sprite from pixel strings.
 - `engine/stubs/sdl.stub.php` — every raw SDL / SDL_image / SDL_mixer / SDL_ttf function and constant.
 - `engine/tests/` — usage examples of CollisionSystem, TiledJsonLoader, SceneManager, Menu, Net.
-- `docs/` (French) — architecture, build, browser pitfalls, tiles, network, porting an existing game.
+- `docs/` (French) — architecture, build, browser pitfalls, tiles, network, porting an existing game, remaking a CPC game (`docs/cpc.md`).
+- [dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp) — remake an Amstrad CPC game from its disc (§12).

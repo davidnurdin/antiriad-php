@@ -168,7 +168,8 @@ seulement dans `var/`.
 - [docs/api-web.md](docs/api-web.md) : OpenGL / WebGL, son 3D (OpenAL), mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
 - [docs/cpc.md](docs/cpc.md) : refaire un jeu Amstrad CPC depuis sa disquette, avec [dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp)
-- [docs/portail.md](docs/portail.md) : le futur site qui regroupera les jeux
+- [docs/portail.md](docs/portail.md) : le playground JumPHP (annuaire, éditeur, MCP) et les portails de jeux
+- [docs/remote.md](docs/remote.md) : les jeux distants (moteur partagé, fichiers un par un)
 
 ---
 

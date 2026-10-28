@@ -50,10 +50,12 @@ Games (<game> = a folder of games/, e.g. pong)
   shot <game> [frames] [out.png]   headless screenshot after N frames (default 120) -> var/screenshots/
   build <game>              browser build -> games/<game>/dist/web (static files)
   build:remote <game>       the game as a remote game (shared engine, files one by one) -> dist/remote
+  build:site <game>         the game's web site (site/) + the game in play/ -> dist/site (what deploy sends)
+  siteshot <game>           headless Chrome on dist/site: desktop + phone screenshots, broken images, JS errors
   serve <game> [port]       serve the browser build on http://localhost:<port> (default 8080)
   webshot <game> [seconds] [keys]  headless Chrome: load the browser build, play keys, screenshot, fail on errors
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
-                            (serve / webshot: JUMPHP_WEB=remote uses dist/remote)
+                            (serve / webshot: JUMPHP_WEB=remote uses dist/remote, JUMPHP_WEB=site dist/site)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
   deploy [game...]          to your server (JUMPHP_SERVER in .env, see deploy:setup): browser builds + FrankenPHP
                             (alone or behind Traefik), docker compose up there. Default game: JUMPHP_GAME.
@@ -325,6 +327,49 @@ cmd_build() {
   say "done: $dir/dist/web ($(du -sh "$ROOT/$dir/dist/web" | cut -f1)). Try it: bin/jumphp serve $game"
 }
 
+# The game's own web site (games/<id>/site/, AGENTS.md "A web site for the game") at the root of <out>, the
+# browser build in <out>/play/; {{DOMAIN}} replaced in its text files (canonical links, sitemap, og:image).
+assemble_site() {
+  local game="$1" out="$2" domain="$3" pages="$ROOT/games/$1/site"
+  mkdir -p "$out"
+  cp -r "$pages/." "$out/"
+  rm -rf "$out/play" && cp -r "$ROOT/games/$game/dist/web" "$out/play"
+  (cd "$pages" && find . -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' -o -name '*.webmanifest' \)) |
+    while read -r file; do
+      sed "s#{{DOMAIN}}#$domain#g" "$pages/$file" > "$out/$file"
+    done
+}
+
+# The site + the game, as the server will get them, in dist/site ({{DOMAIN}} = localhost:<port>).
+cmd_build_site() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"
+  [ -f "$ROOT/$dir/site/index.html" ] || die "no web site: $dir/site/index.html (AGENTS.md: A web site for the game)"
+  cmd_build "$game"
+  rm -rf "$ROOT/$dir/dist/site"
+  assemble_site "$game" "$ROOT/$dir/dist/site" "localhost:${2:-8080}"
+  say "done: $dir/dist/site. Try it: JUMPHP_WEB=site bin/jumphp serve $game; check it: bin/jumphp siteshot $game"
+}
+
+# Headless Chrome on the site (dist/site): full-page screenshots, desktop and phone, every image loaded,
+# no JavaScript error, no sideways scrolling on a phone.
+cmd_siteshot() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"
+  [ -f "$ROOT/$dir/dist/site/index.html" ] || cmd_build_site "$game" 18998
+  local name="jumphp-siteshot-$game" port=18998
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker run -d --name "$name" -p "127.0.0.1:$port:80" -v "$ROOT/$dir/dist/site:/srv:ro" \
+    -v "$ROOT/docker/web/Caddyfile:/etc/frankenphp/Caddyfile:ro" "$WEB_IMAGE" >/dev/null
+  trap 'docker rm -f "'"$name"'" >/dev/null 2>&1 || true' EXIT
+  sleep 1
+  mkdir -p "$ROOT/$dir/var/screenshots" && chmod 777 "$ROOT/$dir/var/screenshots"
+  local status=0
+  docker run --rm --network host --init -v "$ROOT/tools/webshot:/scripts:ro" -v "$ROOT/$dir/var/screenshots:/out" -w /home/pptruser \
+    "$PUPPETEER_IMAGE" sh -c "cp /scripts/siteshot.cjs . && node siteshot.cjs http://127.0.0.1:$port/ /out" || status=1
+  echo "$ROOT/$dir/var/screenshots/site-desktop.png"
+  echo "$ROOT/$dir/var/screenshots/site-phone.png"
+  return $status
+}
+
 # A remote game (docs/remote.md) in dist/remote: the runtime in engine/, the game's files, manifest, page.
 cmd_build_remote() {
   local game="${1:-}"; local dir; dir="$(game_dir "$game")"
@@ -413,13 +458,7 @@ cmd_server_deploy() {
   for game in "${games[@]}"; do game_dir "$game" >/dev/null; cmd_build "$game"; done
   local pages="$ROOT/games/${games[0]}/site"
   if [ ${#games[@]} -eq 1 ] && [ -f "$pages/index.html" ]; then
-    # the game's own web site (games/<id>/site/) at the root, the game in play/; {{DOMAIN}} in its pages
-    cp -r "$pages/." "$out/site/"
-    cp -r "$ROOT/games/${games[0]}/dist/web" "$out/site/play"
-    (cd "$pages" && find . -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' -o -name '*.webmanifest' \)) |
-      while read -r file; do
-        sed "s#{{DOMAIN}}#$JUMPHP_DOMAIN#g" "$pages/$file" > "$out/site/$file"
-      done
+    assemble_site "${games[0]}" "$out/site" "$JUMPHP_DOMAIN"
   elif [ ${#games[@]} -eq 1 ]; then
     cp -r "$ROOT/games/${games[0]}/dist/web/." "$out/site/"
   else
@@ -613,6 +652,8 @@ main() {
     shot) cmd_shot "$@" ;;
     build) cmd_build "$@" ;;
     build:remote) cmd_build_remote "$@" ;;
+    build:site) cmd_build_site "$@" ;;
+    siteshot) cmd_siteshot "$@" ;;
     serve) cmd_serve "$@" ;;
     webshot) cmd_webshot "$@" ;;
     relay) cmd_relay "$@" ;;

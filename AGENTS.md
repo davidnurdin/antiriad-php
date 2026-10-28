@@ -745,7 +745,73 @@ Then read its `AGENTS.md` and `docs/method.md`. In short:
 Example: the Rainbow Islands remake, https://github.com/davidnurdin/rainbow-island (its `tools/extract/`), and
 `examples/rainbow-islands/` in dsk2jumphp.
 
-## 13. Reference
+## 13. A web site for the game (`site/`)
+
+A game can have its own home page: `games/<id>/site/` (static files). `bin/jumphp deploy` puts it at the root
+of the domain with the game in `/play/`; the JumPHP playground (§14) shows it as the game's page. Make one when
+the user asks for a site / home page / landing page, and always for a game published on the playground.
+Example: the Rainbow Islands remake (https://github.com/davidnurdin/rainbow-island, `games/rainbow-island/site/`
+and `tools/site/`).
+
+- **Themed with the game's own graphics**: real screenshots (`bin/jumphp shot`, several levels / moments,
+  `JUMPHP_SCENE_PARAMS` test params), sprites and tiles cut from the game's assets, the game's colours. Make the
+  pictures with a script kept in the game (`tools/site/shots.sh` + a Python/PHP image script): it can be re-run
+  when the game changes. Pixel art scaled by whole factors, nearest neighbour; `image-rendering: pixelated`.
+- **Files**: `site/index.html` (one page is enough; CSS inline), `site/images/` (PNG/JPG/WebP, no SVG),
+  `site/robots.txt`, `site/sitemap.xml`; a favicon (`images/favicon.png`); `og.png` 1200 × 630 for sharing.
+  No external scripts, fonts or trackers; it must work offline from its folder.
+- **Link to the game**: `href="play/"` (relative: it works on your domain and on the playground), big and near
+  the top, again further down. The game's page title, controls (keyboard, gamepad, phone), what the game is.
+- **SEO**: `<html lang>`, `<title>` (game + genre + "play online free"), `<meta name="description">`, canonical,
+  Open Graph + Twitter card, `<h1>`, one `<h2>` per section, `alt` on every image, JSON-LD
+  `VideoGame` (name, description, genre, gamePlatform, image, screenshot, `isAccessibleForFree`,
+  `potentialAction` PlayAction → `play/`), FAQ as `FAQPage` if there is one. Absolute URLs are written
+  `https://{{DOMAIN}}/...`: replaced by the real address when deployed (`https://<domain>/` on your server,
+  `https://<playground>/<game>/` on the playground).
+- **Phones**: works at 390 px wide, no sideways scrolling, 16 px side margins.
+- Language: the user's language (or the game's `lang`). Credit the original authors for a remake.
+- **Check it**: `bin/jumphp build:site <id>` then `bin/jumphp siteshot <id>`: it fails on a broken image, a
+  JavaScript error, a missing title / description / `play/` link or sideways scrolling, and writes
+  `var/screenshots/site-desktop.png` and `site-phone.png`: **open them** and look.
+
+## 14. Publishing on the JumPHP playground
+
+The **JumPHP playground** is a web site of JumPHP games: a directory by category, each game at
+`https://<playground>/<game>`, played in the browser with a shared engine (remote mode, docs/remote.md), its
+sources browsable, an online editor. Its source: https://github.com/davidnurdin/jumphp-playground. A project
+there is a **public GitHub repository of the user** holding a JumPHP project with **one game** in
+`games/<id>/`; the playground publishes it after each push to the default branch.
+
+The user signs in with GitHub on the playground, makes an MCP token (`/studio/mcp`) and adds the server to
+Claude Code (the page shows the command, `claude mcp add --transport http --scope user jumphp https://<playground>/mcp
+--header "Authorization: Bearer jph_..."`). Its tools: `whoami`, `list_categories`, `list_projects`,
+`create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_games`,
+`list_game_files`, `read_game_file`. The server's instructions say the same as this section.
+
+To make a game for the user on the playground:
+1. `create_project` (title, description, category, brief = the user's request); `get_project` until its status
+   is no longer `creating`. It made the repository from this version of JumPHP with the skeleton game and
+   `BRIEF.md`.
+2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only.
+3. Its home page `games/<id>/site/` (§13) and `games/<id>/assets/thumbnail.png` (the directory's picture,
+   16:9; else the site's `og:image`, else `assets/icon.png`).
+4. Check it like the playground runs it: `bin/jumphp build:remote <id>` then
+   `JUMPHP_WEB=remote bin/jumphp webshot <id> 6 '[[1,"Enter"]]'`.
+5. Commit, `git push`, `sync_project`: it publishes at once and returns errors / warnings. Fix and push until
+   the status is `ready`. Then `update_project listed=true` and give the user the game's URL.
+
+What the playground publishes and how:
+- only `games/<id>/` (the `vendor/` of the game is not used: the engine and its packages come from the shared
+  engine; Composer packages of the game itself are not supported there);
+- the engine version is the repository's `VERSION` (it must be one the playground serves: keep JumPHP up to
+  date with `bin/jumphp update`);
+- a commit with a PHP syntax error (`php -l`) is not published; no PHP runs on the server (it runs in the
+  player's browser);
+- the site is served as the game's page (framed, on a separate origin); `{{DOMAIN}}` there = `<playground>/<game>`;
+- limits: 4000 files, 120 MB in all, 20 MB per file; no symbolic links;
+- never put the MCP token or any secret in the repository.
+
+## 15. Reference
 
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.

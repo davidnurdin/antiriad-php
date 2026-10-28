@@ -1,4 +1,14 @@
-# Le portail de jeux (à venir)
+# Les portails de jeux et le playground
+
+**Le playground JumPHP** (https://github.com/davidnurdin/jumphp-playground) est un portail complet : annuaire
+par catégorie, une page par jeu (son site `games/<id>/site/`), les jeux joués en mode distant
+([remote.md](remote.md) : le moteur partagé téléchargé une fois, les fichiers du jeu un par un), les sources
+navigables, un éditeur en ligne (brouillons, aperçu, push GitHub, fork). On s'y connecte avec GitHub ; un
+projet est un dépôt GitHub public de l'utilisateur, publié à chaque push. Son serveur MCP laisse le Claude
+local de l'utilisateur créer et publier un jeu (AGENTS.md §14).
+
+Un portail plus simple peut aussi regrouper des builds classiques, comme ci-dessous.
+
 
 Chaque build navigateur est un dossier statique autonome (`games/<jeu>/dist/web/`) avec un manifeste
 `game.json` pour qu'un site puisse regrouper les jeux :

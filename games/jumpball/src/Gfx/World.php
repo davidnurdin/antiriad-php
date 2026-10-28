@@ -12,10 +12,10 @@ use JumPHP\Renderer\Renderer;
 /**
  * Draws a Run in 3D (a service: one instance, shared by the title screen and the game).
  *
- * Browser: WebGL behind the 2D (the scenes clear with KEY, the HUD is plain SDL drawing over it). The track
+ * OpenGL (desktop) / WebGL (browser) behind the 2D (the scenes clear with KEY, the HUD is plain SDL drawing over it). The track
  * is cut in chunks of 16 rows, one vertex buffer each, built once when the chunk comes into view and reused
  * for the next chunk when it leaves: a frame only sends a dozen draw commands.
- * Desktop (no WebGL): the same camera, drawn by SoftwareView.
+ * Without OpenGL (JUMPHP_GL=0, no GPU): the same camera, drawn by SoftwareView.
  */
 final class World
 {

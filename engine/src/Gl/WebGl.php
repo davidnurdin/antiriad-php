@@ -3,17 +3,15 @@
 namespace JumPHP\Gl;
 
 use Evenement\EventEmitter;
-use JumPHP\Bridge\JsBridge;
-use JumPHP\Kernel\Platform;
 use JumPHP\Renderer\Renderer;
 use JumPHP\Util\Color;
 
 /**
- * WebGL from PHP ($this->engine->gl()), in the browser: GLSL shaders, 3D, post-processing of the picture.
+ * A 3D layer and post-processing shaders ($this->engine->gl()), on desktop and in the browser: built on
+ * OpenGl (the PHP-OpenGL extension, in SDL's own GL context; WebGL 1 in the browser).
  *
- * The page keeps a second canvas over the game (engine/web/jumphp-gl.js). After each PHP frame it takes the
- * picture drawn by SDL, mixes it with a 3D layer drawn by the commands of this frame, then runs an optional
- * post-processing shader on the whole picture:
+ * At the end of each frame the 2D picture drawn by SDL is mixed with the 3D layer drawn by the commands of the
+ * frame, then an optional post-processing shader runs on the whole picture:
  *
  *   SDL picture (2D) ─┐
  *                     ├─ composite ─> post shader (optional) ─> screen
@@ -21,7 +19,8 @@ use JumPHP\Util\Color;
  *                                  a darker shade of the key shows a darker 3D (fades, translucent menus)
  *                         'above': the 3D is drawn over the 2D (its transparent pixels show the 2D)
  *
- * Resources are created once (enter()), they get an id; drawing is immediate: draw() in render(), every frame.
+ * Resources are created once (enter()), they get an id; drawing is immediate mode: draw() in render(), every
+ * frame (the commands run at the end of the frame, in the layer).
  *
  *   $gl = $this->engine->gl();
  *   if ($gl->isAvailable()) {
@@ -31,49 +30,107 @@ use JumPHP\Util\Color;
  *   }
  *   // render():
  *   $r->clear([255, 0, 255]);                                // the key colour: here the 3D shows
- *   $gl->clear([0, 0, 0, 1]);
+ *   $gl->clear([0, 0, 0, 255]);
  *   $gl->draw($this->prog, [
  *       'attributes' => ['a_pos' => [$this->cube, 3, 6, 0], 'a_color' => [$this->cube, 3, 6, 3]],  // [buffer, size, stride, offset] in floats
  *       'uniforms' => ['u_mvp' => Mat4::multiply($projection, $model)],
- *       'count' => 36,
  *   ]);
  *   $gl->setPostShader('void main() { gl_FragColor = texture2D(u_frame, v_uv) * vec4(1.0, 0.9, 0.8, 1.0); }');
  *
- * GLSL: WebGL 1 (GLSL ES 1.00). A post shader gets: varying vec2 v_uv (0..1 over the canvas, y up),
- * uniform sampler2D u_frame (the picture), vec2 u_resolution (canvas pixels), vec4 u_viewport (where the game
- * view is: x, y, w, h in canvas pixels, y up), vec2 u_view (virtual size), float u_time (game seconds), plus
- * its own uniforms. These declarations and `precision mediump float;` are added before the source.
+ * GLSL ES 1.00 (`#version 100` is added). A post shader gets: varying vec2 v_uv (0..1 over the picture, y up),
+ * uniform sampler2D u_frame (the picture), vec2 u_resolution (pixels of the picture it runs on), vec4
+ * u_viewport (where the game view is in it: x, y, w, h), vec2 u_view (virtual size), float u_time (game
+ * seconds), plus its own uniforms. These declarations and `precision mediump float;` come before the source.
+ * With resolution 'view' the layer, the composite and the post shader run at the virtual resolution (big
+ * pixels); with 'native' at the window's (smooth 3D, over the scaled picture).
  *
- * Desktop: there is no WebGL (no OpenGL binding in PHP SDL): isAvailable() is false and every call does
- * nothing. A game draws a 2D fallback then (see games/hello-webgl, Mat4 also works for software 3D).
+ * Without OpenGL (headless smoke tests with the SDL dummy driver, no extension): isAvailable() is false and
+ * every call does nothing: draw a 2D fallback (Mat4::project() for software 3D, see games/jumpball).
+ * For raw gl* calls, see OpenGl::begin() / end().
  *
- * Events: 'error' (string $message) when a shader does not compile / link (also written to the console).
+ * Events: 'error' (string $message) when a shader does not compile / link (also written to stderr / the console).
  */
 class WebGl extends EventEmitter
 {
-    public const FILE = '/tmp/jumphp-gl';
-    private const MODES = ['points', 'lines', 'line_strip', 'line_loop', 'triangles', 'triangle_strip', 'triangle_fan'];
+    private const POST_HEADER = <<<'GLSL'
+        precision mediump float;
+        varying vec2 v_uv;
+        uniform sampler2D u_frame;
+        uniform vec2 u_resolution;
+        uniform vec4 u_viewport;
+        uniform vec2 u_view;
+        uniform float u_time;
+
+        GLSL;
+
+    // the 3D layer mixed with the 2D picture: u_mode 0 = below (the key colour shows the layer), 1 = above (alpha),
+    // 2 = the picture only (before a post shader). Below: a pixel equal to the key colour times s (0..1) shows the
+    // layer times s, so translucent black over the key (pause menus, scene fades) darkens the 3D too.
+    private const COMPOSITE = <<<'GLSL'
+        precision mediump float;
+        varying vec2 v_uv;
+        uniform sampler2D u_frame;
+        uniform sampler2D u_layer;
+        uniform float u_frameTop;
+        uniform float u_swapIn;
+        uniform float u_swapOut;
+        uniform vec3 u_key;
+        uniform float u_mode;
+        void main() {
+            vec4 f = texture2D(u_frame, vec2(v_uv.x, mix(v_uv.y, 1.0 - v_uv.y, u_frameTop)));
+            if (u_swapIn > 0.5) {
+                f = f.bgra;
+            }
+            vec3 c = f.rgb;
+            if (u_mode < 1.5) {
+                vec4 l = texture2D(u_layer, v_uv);
+                if (u_mode < 0.5) {
+                    float s = clamp(dot(f.rgb, u_key) / dot(u_key, u_key), 0.0, 1.0);
+                    c = (s > 0.02 && distance(f.rgb, u_key * s) < 0.02) ? l.rgb * l.a * s : f.rgb;
+                } else {
+                    c = mix(f.rgb, l.rgb, l.a);
+                }
+            }
+            gl_FragColor = u_swapOut > 0.5 ? vec4(c.bgr, 1.0) : vec4(c, 1.0);
+        }
+        GLSL;
 
     private int $nextId = 1;
-    /** @var array<int, array> commands of this frame */
+    /** @var array<int, array{0: string, 1: int}> id => [kind, GL name] */
+    private array $res = [];
+    /** @var array{position: string, resolution: string, key: float[]}|null */
+    private ?array $layer = null;
+    /** @var array{program: int, uniforms: array<string, mixed>}|null */
+    private ?array $post = null;
+    /** @var array<int, array{0: string, 1: mixed, 2?: mixed}> the commands of this frame */
     private array $commands = [];
-    private bool $active = false;
+    /** @var array{fb: int, tex: int, depth: int, w: int, h: int}|null */
+    private ?array $layerTarget = null;
+    /** @var array{fb: int, tex: int, depth: int, w: int, h: int}|null */
+    private ?array $compTarget = null;
+    private int $frameTex = 0;
+    /** @var int[] size of $frameTex */
+    private array $frameSize = [0, 0];
+    private int $composite = 0;
+    private bool $hooked = false;
+    /** @var \Closure(): float */
+    private \Closure $clock;
 
-    public function __construct(private JsBridge $bridge)
+    public function __construct(private OpenGl $gl, ?\Closure $clock = null)
     {
-        $bridge->on('gl', function (array $e): void {
-            if (isset($e['error'])) {
-                $message = (string)$e['error'];
-                \JumPHP\Kernel\Application::stderr("[webgl] $message\n");
-                $this->emit('error', [$message]);
-            }
-        });
+        $this->clock = $clock ?? static fn (): float => 0.0;
+        $gl->on('error', fn (string $message) => $this->emit('error', [$message]));
     }
 
-    /** True in a browser with WebGL. */
+    /** True with OpenGL: the browser (WebGL), a desktop window with a GPU or Mesa. */
     public function isAvailable(): bool
     {
-        return Platform::isWasm() && (bool)Platform::setting('JUMPHP_WEBGL', false);
+        return $this->gl->isAvailable();
+    }
+
+    public function openGl(): OpenGl
+    {
+        return $this->gl;
     }
 
     // --- layer and post-processing -------------------------------------------------------------
@@ -81,7 +138,7 @@ class WebGl extends EventEmitter
     /**
      * Turns the 3D layer on.
      * @param string $position 'below' (2D over 3D, through the key colour) or 'above' (3D over the 2D)
-     * @param string $resolution 'view' (game.yaml size: big retro pixels) or 'native' (screen pixels: smooth)
+     * @param string $resolution 'view' (game.yaml size: big retro pixels) or 'native' (window pixels: smooth)
      * @param Color|array|string $key 'below' only: the 2D colour that shows the 3D (exact match)
      */
     public function setLayer(string $position = 'below', string $resolution = 'view', Color|array|string $key = [255, 0, 255]): void
@@ -90,12 +147,13 @@ class WebGl extends EventEmitter
             throw new \InvalidArgumentException("setLayer: position below|above, resolution view|native");
         }
         $c = Color::of($key);
-        $this->command(['c' => 'layer', 'position' => $position, 'resolution' => $resolution, 'key' => [$c->r, $c->g, $c->b]]);
+        $this->layer = ['position' => $position, 'resolution' => $resolution, 'key' => [$c->r / 255, $c->g / 255, $c->b / 255]];
+        $this->hook();
     }
 
     public function removeLayer(): void
     {
-        $this->command(['c' => 'layer', 'position' => null]);
+        $this->layer = null;
     }
 
     /**
@@ -104,19 +162,36 @@ class WebGl extends EventEmitter
      */
     public function setPostShader(?string $fragment, array $uniforms = []): void
     {
-        $this->command(['c' => 'post', 'fs' => $fragment, 'uniforms' => (object)$this->uniforms($uniforms)]);
+        if ($this->post !== null) {
+            $this->gl->deleteProgram($this->post['program']);
+        }
+        $this->post = null;
+        if ($fragment === null || !$this->isAvailable()) {
+            return;
+        }
+        // the game's main() runs, then its colour is stored the way SDL's target wants it
+        $program = $this->gl->program(OpenGl::QUAD_VERTEX, self::POST_HEADER . "#define main jumphp_post_main\n" . $fragment
+            . "\n#undef main\nuniform float jumphp_swap;\nvoid main() {\n    jumphp_post_main();\n    if (jumphp_swap > 0.5) gl_FragColor = gl_FragColor.bgra;\n}\n");
+        if ($program > 0) {
+            $this->post = ['program' => $program, 'uniforms' => $uniforms];
+            $this->hook();
+        }
     }
 
     /** A uniform of the post shader. */
     public function setUniform(string $name, float|int|array $value): void
     {
-        $this->command(['c' => 'postUniform', 'name' => $name, 'value' => $this->uniformValue($value)]);
+        if ($this->post !== null) {
+            $this->post['uniforms'][$name] = $value;
+        }
     }
 
     /** Back to plain SDL output: no layer, no post shader, resources kept. */
     public function disable(): void
     {
-        $this->command(['c' => 'disable']);
+        $this->layer = null;
+        $this->setPostShader(null);
+        $this->commands = [];
     }
 
     // --- resources ------------------------------------------------------------------------------
@@ -124,36 +199,35 @@ class WebGl extends EventEmitter
     /** A shader program (GLSL ES 1.00, full sources). Errors: 'error' event. @return int id */
     public function program(string $vertex, string $fragment): int
     {
-        return $this->create(['c' => 'program', 'vs' => $vertex, 'fs' => $fragment]);
+        return $this->add('program', $this->gl->program($vertex, $fragment));
     }
 
     /** @param float[] $data vertex data (Float32) @return int id */
     public function buffer(array $data, bool $dynamic = false): int
     {
-        return $this->create(['c' => 'buffer', 'data' => self::floats($data), 'dynamic' => $dynamic]);
+        return $this->add('buffer', $this->gl->buffer($data, $dynamic));
     }
 
     /** @param int[] $indices (Uint16: at most 65535 vertices) @return int id */
     public function indexBuffer(array $indices): int
     {
-        return $this->create(['c' => 'buffer', 'data' => array_map('intval', array_values($indices)), 'index' => true]);
+        return $this->add('buffer', $this->gl->indexBuffer($indices));
     }
 
-    /** New data for a buffer (same kind). */
+    /** New data for a buffer. */
     public function updateBuffer(int $id, array $data): void
     {
-        $this->command(['c' => 'update', 'id' => $id, 'data' => self::floats($data)]);
+        $this->gl->updateBuffer($this->name($id, 'buffer'), $data);
     }
 
     /**
-     * A texture from an image of the game (png, jpg), loaded by the browser in the background (transparent
-     * until then). Power-of-two sizes may repeat; others are clamped.
+     * A texture from an image of the game (png, jpg). Power-of-two sizes may repeat; others are clamped.
      * @param string $path relative to the game root: 'assets/textures/crate.png'
      * @return int id
      */
     public function texture(string $path, bool $smooth = false, bool $repeat = false): int
     {
-        return $this->create(['c' => 'texture', 'path' => '/game/' . ltrim($path, '/'), 'smooth' => $smooth, 'repeat' => $repeat]);
+        return $this->add('texture', $this->gl->texture($path, $smooth, $repeat));
     }
 
     /**
@@ -162,15 +236,9 @@ class WebGl extends EventEmitter
      */
     public function textureFromRgba(int $width, int $height, string $rgba, bool $smooth = false, ?int $id = null): int
     {
-        if (strlen($rgba) !== $width * $height * 4) {
-            throw new \InvalidArgumentException('textureFromRgba: ' . strlen($rgba) . " bytes for {$width}x{$height}");
-        }
-        $command = ['c' => 'rgba', 'w' => $width, 'h' => $height, 'data' => base64_encode($rgba), 'smooth' => $smooth];
-        if ($id !== null) {
-            $this->command(['id' => $id] + $command);
-            return $id;
-        }
-        return $this->create($command);
+        $pot = ($width & ($width - 1)) === 0 && ($height & ($height - 1)) === 0;
+        $name = $this->gl->textureFromRgba($width, $height, $rgba, $smooth, $pot, $id !== null ? $this->name($id, 'texture') : null);
+        return $id ?? $this->add('texture', $name);
     }
 
     /** RGBA bytes of a GD image, for textureFromRgba(). */
@@ -191,7 +259,16 @@ class WebGl extends EventEmitter
 
     public function delete(int $id): void
     {
-        $this->command(['c' => 'delete', 'id' => $id]);
+        if (!isset($this->res[$id])) {
+            return;
+        }
+        [$kind, $name] = $this->res[$id];
+        unset($this->res[$id]);
+        match ($kind) {
+            'program' => $this->gl->deleteProgram($name),
+            'buffer' => $this->gl->deleteBuffer($name),
+            default => $this->gl->deleteTexture($name),
+        };
     }
 
     // --- drawing (immediate: every frame) ---------------------------------------------------------
@@ -199,8 +276,10 @@ class WebGl extends EventEmitter
     /** Clears the 3D layer. @param Color|array|string $color alpha 0 = transparent ('above' layers) */
     public function clear(Color|array|string $color = [0, 0, 0, 0], bool $depth = true): void
     {
-        $c = Color::of($color);
-        $this->command(['c' => 'clear', 'color' => [$c->r / 255, $c->g / 255, $c->b / 255, $c->a / 255], 'depth' => $depth]);
+        if ($this->isAvailable()) {
+            $c = Color::of($color);
+            $this->commands[] = ['clear', [$c->r / 255, $c->g / 255, $c->b / 255, $c->a / 255], $depth];
+        }
     }
 
     /**
@@ -215,92 +294,192 @@ class WebGl extends EventEmitter
      */
     public function draw(int $program, array $options): void
     {
-        $mode = $options['mode'] ?? 'triangles';
-        if (!in_array($mode, self::MODES, true)) {
-            throw new \InvalidArgumentException("draw: mode '$mode' (" . implode(', ', self::MODES) . ')');
-        }
-        $attributes = [];
-        foreach ($options['attributes'] ?? [] as $name => $a) {
-            $attributes[$name] = [(int)$a[0], (int)$a[1], (int)($a[2] ?? 0), (int)($a[3] ?? 0)];
-        }
-        $this->command([
-            'c' => 'draw', 'program' => $program, 'mode' => $mode,
-            'attributes' => (object)$attributes,
-            'uniforms' => (object)$this->uniforms($options['uniforms'] ?? []),
-            'textures' => (object)array_map('intval', $options['textures'] ?? []),
-            'indices' => isset($options['indices']) ? (int)$options['indices'] : null,
-            'count' => (int)($options['count'] ?? 0), 'first' => (int)($options['first'] ?? 0),
-            'depth' => (bool)($options['depth'] ?? true), 'cull' => $options['cull'] ?? null, 'blend' => (bool)($options['blend'] ?? false),
-        ]);
-    }
-
-    /**
-     * @internal Engine: after the frame is drawn, the commands go to the page (engine/web/jumphp-gl.js reads
-     * them right after the PHP frame).
-     */
-    public function flush(Renderer $renderer, float $time): void
-    {
-        if (!Platform::isWasm() || (!$this->active && $this->commands === [])) {
-            $this->commands = [];
-            return;
-        }
-        [$ow, $oh] = $renderer->outputSize();
-        $frame = [
-            'cmds' => $this->commands,
-            'lb' => $renderer->letterbox(),
-            'out' => [$ow, $oh],
-            'view' => [$renderer->getWidth(), $renderer->getHeight()],
-            'time' => $time,
-        ];
-        $this->commands = [];
-        file_put_contents(self::FILE, json_encode($frame, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION));
-    }
-
-    // ---------------------------------------------------------------------------------------------
-
-    private function create(array $command): int
-    {
-        $id = $this->nextId++;
-        $this->command(['id' => $id] + $command);
-        return $id;
-    }
-
-    private function command(array $command): void
-    {
         if (!$this->isAvailable()) {
             return;
         }
-        if ($command['c'] === 'layer' || $command['c'] === 'post') {
-            $this->active = $this->active || ($command['position'] ?? $command['fs'] ?? null) !== null;
-        } elseif ($command['c'] === 'disable') {
-            $this->active = false;
+        $mode = $options['mode'] ?? 'triangles';
+        if (!in_array($mode, ['points', 'lines', 'line_strip', 'line_loop', 'triangles', 'triangle_strip', 'triangle_fan'], true)) {
+            throw new \InvalidArgumentException("draw: mode '$mode'");
         }
-        $this->commands[] = $command;
+        foreach ($options['attributes'] ?? [] as $name => $a) {
+            $options['attributes'][$name][0] = $this->name((int)$a[0], 'buffer');
+        }
+        foreach ($options['textures'] ?? [] as $name => $id) {
+            $options['textures'][$name] = $this->name((int)$id, 'texture');
+        }
+        if (isset($options['indices'])) {
+            $options['indices'] = $this->name((int)$options['indices'], 'buffer');
+        }
+        $this->commands[] = ['draw', $this->name($program, 'program'), $options];
     }
 
-    /** @return array<string, float[]> */
-    private function uniforms(array $uniforms): array
+    /** @deprecated nothing to do: the frame is composed by the engine (Renderer frame hooks). */
+    public function flush(Renderer $renderer, float $time): void
     {
-        $out = [];
-        foreach ($uniforms as $name => $value) {
-            $out[$name] = $this->uniformValue($value);
-        }
-        return $out;
     }
 
-    /** @return float[] */
-    private function uniformValue(float|int|array $value): array
+    // --- end of the frame -----------------------------------------------------------------------
+
+    private function hook(): void
     {
-        return is_array($value) ? self::floats($value) : [(float)$value];
+        if ($this->hooked || !$this->isAvailable()) {
+            return;
+        }
+        $this->hooked = true;
+        $renderer = $this->gl->renderer();
+        $renderer->addFrameHook('view', fn (Renderer $r) => $this->compose($r, 'view'));
+        $renderer->addFrameHook('window', fn (Renderer $r) => $this->compose($r, 'native'));
     }
 
-    /** @return float[] */
-    private static function floats(array $data): array
+    /** At the end of the frame: the layer (its commands), the composite, the post shader. */
+    private function compose(Renderer $r, string $stage): void
     {
-        $out = [];
-        foreach ($data as $v) {
-            $out[] = (float)$v;
+        $resolution = $this->layer['resolution'] ?? 'view';
+        if ($resolution !== $stage) {
+            return;
         }
-        return $out;
+        if ($this->layer === null && $this->post === null) {
+            $this->commands = [];
+            return;
+        }
+        $gl = $this->gl;
+        $gl->sdlSwapsRedBlue();          // measured with SDL calls: before the state is saved
+        $gl->save();
+        $sdlFb = (int)glGetIntegerv(GL_FRAMEBUFFER_BINDING);
+        if ($stage === 'view') {
+            [$x, $y, $w, $h] = [0, 0, $r->getWidth(), $r->getHeight()];
+        } else {
+            [$ow, $oh] = $r->outputSize();
+            [$lx, $ly, $w, $h] = $r->letterbox();
+            [$x, $y] = [$lx, $oh - $ly - $h];        // GL: y up
+        }
+        if ($w <= 0 || $h <= 0) {
+            $gl->restore();
+            return;
+        }
+
+        if ($this->layer !== null) {
+            $this->layerTarget = $this->resized($this->layerTarget, $w, $h, true);
+            glBindFramebuffer(GL_FRAMEBUFFER, $this->layerTarget['fb']);
+            glViewport(0, 0, $w, $h);
+            glClearColor(0, 0, 0, 0);
+            glDepthMask(1);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            foreach ($this->commands as $cmd) {
+                if ($cmd[0] === 'clear') {
+                    glClearColor(...$cmd[1]);
+                    glDepthMask(1);
+                    glClear(GL_COLOR_BUFFER_BIT | ($cmd[2] ? GL_DEPTH_BUFFER_BIT : 0));
+                } else {
+                    $gl->draw($cmd[1], $cmd[2]);
+                }
+            }
+        }
+        $this->commands = [];
+
+        // the 2D picture, copied from SDL's target (an SDL target texture stores its top row first)
+        glBindFramebuffer(GL_FRAMEBUFFER, $sdlFb);
+        $this->frameTexture($w, $h);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, $x, $y, $w, $h);
+        $intoSdl = $stage === 'view';
+
+        $composite = $this->compositeProgram();
+        $mode = $this->layer === null ? 2.0 : ($this->layer['position'] === 'above' ? 1.0 : 0.0);
+        $swap = $intoSdl && $gl->sdlSwapsRedBlue() ? 1.0 : 0.0;     // colours as SDL's GLES2 targets store them
+        $setup = function (int $p, bool $flip) use ($gl, $mode, $intoSdl, $swap): void {
+            $gl->uniform($p, 'u_flip', $flip ? 1.0 : 0.0);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, $this->layerTarget['tex'] ?? 0);
+            $gl->uniform($p, 'u_layer', 1);
+            glActiveTexture(GL_TEXTURE0);
+            $gl->uniform($p, 'u_key', $this->layer['key'] ?? [1, 0, 1]);
+            $gl->uniform($p, 'u_mode', $mode);
+            $gl->uniform($p, 'u_frameTop', $intoSdl ? 1.0 : 0.0);
+            $gl->uniform($p, 'u_swapIn', $swap);
+            $gl->uniform($p, 'u_swapOut', $flip ? $swap : 0.0);
+        };
+        glDisable(GL_BLEND);
+        glDisable(GL_SCISSOR_TEST);
+        if ($this->post === null) {
+            glBindFramebuffer(GL_FRAMEBUFFER, $sdlFb);
+            glViewport($x, $y, $w, $h);
+            $gl->pass($composite, $this->frameTex, fn (int $p) => $setup($p, $intoSdl));
+        } else {
+            $this->compTarget = $this->resized($this->compTarget, $w, $h, false);
+            glBindFramebuffer(GL_FRAMEBUFFER, $this->compTarget['fb']);
+            glViewport(0, 0, $w, $h);
+            $gl->pass($composite, $this->frameTex, fn (int $p) => $setup($p, false));
+            glBindFramebuffer(GL_FRAMEBUFFER, $sdlFb);
+            glViewport($x, $y, $w, $h);
+            $post = $this->post;
+            $gl->pass($post['program'], $this->compTarget['tex'], function (int $p) use ($gl, $post, $w, $h, $r, $intoSdl, $swap): void {
+                $gl->uniform($p, 'u_flip', $intoSdl ? 1.0 : 0.0);
+                $gl->uniform($p, 'jumphp_swap', $swap);
+                $gl->uniform($p, 'u_resolution', [$w, $h]);
+                $gl->uniform($p, 'u_viewport', [0, 0, $w, $h]);
+                $gl->uniform($p, 'u_view', [$r->getWidth(), $r->getHeight()]);
+                $gl->uniform($p, 'u_time', ($this->clock)());
+                foreach ($post['uniforms'] as $name => $value) {
+                    $gl->uniform($p, (string)$name, $value);
+                }
+            });
+        }
+        $gl->restore();
+    }
+
+    /**
+     * @param array{fb: int, tex: int, depth: int, w: int, h: int}|null $target
+     * @return array{fb: int, tex: int, depth: int, w: int, h: int}
+     */
+    private function resized(?array $target, int $w, int $h, bool $depth): array
+    {
+        if ($target !== null && $target['w'] === $w && $target['h'] === $h) {
+            return $target;
+        }
+        if ($target !== null) {
+            $this->gl->deleteTarget($target);
+        }
+        return $this->gl->renderTarget($w, $h, $depth);
+    }
+
+    private function frameTexture(int $w, int $h): void
+    {
+        if ($this->frameTex === 0) {
+            $names = [];
+            glGenTextures(1, $names);
+            $this->frameTex = (int)$names[0];
+        }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, $this->frameTex);
+        if ($this->frameSize !== [$w, $h]) {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, $w, $h, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+            foreach ([GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER] as $p) {
+                glTexParameteri(GL_TEXTURE_2D, $p, GL_NEAREST);
+            }
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            $this->frameSize = [$w, $h];
+        }
+    }
+
+    private function compositeProgram(): int
+    {
+        return $this->composite = $this->composite ?: $this->gl->program(OpenGl::QUAD_VERTEX, self::COMPOSITE);
+    }
+
+    private function add(string $kind, int $name): int
+    {
+        if ($name <= 0) {
+            return 0;
+        }
+        $id = $this->nextId++;
+        $this->res[$id] = [$kind, $name];
+        return $id;
+    }
+
+    private function name(int $id, string $kind): int
+    {
+        $r = $this->res[$id] ?? null;
+        return $r !== null && $r[0] === $kind ? $r[1] : 0;
     }
 }

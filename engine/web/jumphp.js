@@ -5,8 +5,9 @@
 // &workers=N (Web Workers for JumPHP\Async, 0 = none; default: cores - 1, at most 4)
 // Bridge with PHP (JumPHP\Bridge\JsBridge), synchronous with the frames: right before each PHP frame
 // (emscripten preMainLoop) the page's events are written to /tmp/jumphp-events; right after it (postMainLoop)
-// the game's messages (/tmp/jumphp-bridge) are handled and the modules run (jumphp-gl.js: WebGL composition).
-// Modules: jumphp-device.js (page life, phone features), jumphp-http.js (fetch), jumphp-gl.js (WebGL),
+// the game's messages (/tmp/jumphp-bridge) are handled and the modules run. WebGL needs no module: PHP draws
+// with the OpenGL extension in SDL's own WebGL context (JumPHP\Gl\OpenGl).
+// Modules: jumphp-device.js (page life, phone features), jumphp-http.js (fetch),
 // jumphp-pwa.js (installable / offline game: sw.js), jumphp-gamepad.js (Gamepad API).
 // window.JumPHP.send(type, data) sends a custom event to the game: $engine->bridge->on(type, fn (array $data)).
 // Embedding (games portal): the page posts {type: 'jumphp:ready' | 'jumphp:quit' | 'jumphp:bridge', ...}
@@ -158,7 +159,6 @@ function prelude() {
 		`define('JUMPHP_ROOM', ${phpString((params.get('room') || '').toUpperCase())});`,
 		`define('JUMPHP_DEBUG', ${params.get('debug') === '1' ? 'true' : 'false'});`,
 		`define('JUMPHP_WORKERS', ${WORKERS});`,
-		`define('JUMPHP_WEBGL', ${modules.gl && modules.gl.available() ? 'true' : 'false'});`,
 		`define('JUMPHP_STANDALONE', ${matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true ? 'true' : 'false'});`,
 	];
 	const net = params.get('net') || GAME.net_url;
@@ -269,7 +269,7 @@ function startTasks(FS, wasmBinary) {
 
 const modules = {};
 async function loadModules() {
-	for (const [name, file] of [['device', 'jumphp-device.js'], ['http', 'jumphp-http.js'], ['gl', 'jumphp-gl.js'], ['pwa', 'jumphp-pwa.js'], ['gamepad', 'jumphp-gamepad.js']]) {
+	for (const [name, file] of [['device', 'jumphp-device.js'], ['http', 'jumphp-http.js'], ['pwa', 'jumphp-pwa.js'], ['gamepad', 'jumphp-gamepad.js']]) {
 		try {
 			modules[name] = (await import('./' + versioned(file))).install(moduleApi) || {};
 		} catch (e) { console.error(`[${file}]`, e); }

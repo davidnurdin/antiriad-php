@@ -1,7 +1,7 @@
-# WebGL, mobile, cycle de vie, HTTP, PWA, manettes
+# OpenGL / WebGL, son 3D, mobile, cycle de vie, HTTP, PWA, manettes
 
 Ces API marchent sur les deux cibles. Ce qui n'existe pas sur une cible ne fait rien et ne lève pas d'erreur
-(`false` / `null`). L'exemple complet est `games/hello-webgl` ; `games/jumpball` est un vrai jeu en 3D (WebGL).
+(`false` / `null`). L'exemple complet est `games/hello-webgl` ; `games/jumpball` est un vrai jeu en 3D.
 
 ## Le pont page ⇄ PHP
 
@@ -12,7 +12,7 @@ Toutes ces fonctions passent par `JumPHP\Bridge\JsBridge`, synchronisé avec les
 requestAnimationFrame
   ├─ preMainLoop  : la page écrit ses événements dans /tmp/jumphp-events (manettes, cycle de vie, réponses HTTP...)
   ├─ jumphp_frame : PHP lit les événements (JsBridge::poll), met à jour, dessine
-  └─ postMainLoop : la page exécute les messages de PHP (/tmp/jumphp-bridge) et la composition WebGL (/tmp/jumphp-gl)
+  └─ postMainLoop : la page exécute les messages de PHP (/tmp/jumphp-bridge)
 ```
 
 Les événements urgents (`hide`, `close`) sont livrés tout de suite : la page appelle PHP entre deux frames
@@ -22,13 +22,27 @@ Messages personnalisés : `window.JumPHP.send('bonjour', {n: 1})` dans la page, 
 `$this->engine->bridge->on('bonjour', fn (array $d) => ...)` en PHP. Pour les tests, `window.JumPHP.php('echo 1;')`
 exécute du PHP entre deux frames (la sortie part dans la console).
 
-Fichiers JS (`engine/web/`) : `jumphp-device.js` (cycle de vie, mobile), `jumphp-http.js`, `jumphp-gl.js`,
-`jumphp-pwa.js` + `sw.js`, `jumphp-gamepad.js`.
+Fichiers JS (`engine/web/`) : `jumphp-device.js` (cycle de vie, mobile), `jumphp-http.js`,
+`jumphp-pwa.js` + `sw.js`, `jumphp-gamepad.js`. La 3D n'a pas de module JS : PHP appelle WebGL directement.
 
-## WebGL — `$this->engine->gl()`
+## OpenGL / WebGL
 
-Dans le navigateur, un second canvas posé sur le jeu compose l'image SDL (la 2D), une couche 3D dessinée par
-vos shaders, puis éventuellement un shader de post-traitement sur toute l'image :
+Le moteur embarque l'extension [PHP-OpenGL](https://github.com/Ponup/php-opengl) (avec `docker/ext/php-opengl.patch`).
+Ses fonctions `gl*` tournent dans le contexte GL de SDL : OpenGL sur le bureau (pilote du GPU ou Mesa), WebGL 1
+dans le navigateur (les mêmes appels compilés par emscripten). On écrit les shaders en **GLSL ES 1.00**
+(`attribute` / `varying` / `gl_FragColor`, `precision mediump float;` dans les fragment shaders ; le moteur ajoute
+`#version 100`), que les deux cibles acceptent. Sans contexte GL (tests sans écran avec le pilote SDL `dummy`),
+`isAvailable()` vaut false : il faut dessiner un repli en 2D.
+
+Le même programme compile sur les deux cibles, mais deux détails diffèrent, et le moteur les gère seul :
+- les cibles de rendu de SDL stockent leur ligne du haut en premier, donc les passes les retournent ;
+- le renderer GLES2 de SDL (navigateur) range les couleurs en BGR. Le moteur le mesure au démarrage (un pixel
+  rouge relu) et inverse les canaux là où il le faut.
+
+### Haut niveau : couche 3D et post-traitement — `$this->engine->gl()`
+
+À la fin de chaque frame, le moteur compose en GL l'image SDL (la 2D), la couche 3D dessinée par vos shaders,
+puis éventuellement un shader de post-traitement sur toute l'image :
 
 - couche `below` : la 3D apparaît là où la 2D a la couleur clé (par défaut magenta). On efface la vue avec
   cette couleur et on dessine le HUD par-dessus. Une teinte plus sombre de la clé assombrit la 3D, ce qui
@@ -60,11 +74,66 @@ $gl->draw($this->prog, [
   `precision mediump float;`, `varying vec2 v_uv`, `u_frame` (l'image), `u_resolution`, `u_viewport` (où est la
   vue du jeu), `u_view` (taille virtuelle) et `u_time`.
 - Les couleurs de l'API sont en 0..255, comme partout ailleurs ; les uniforms GLSL sont en 0..1.
-- Une erreur de compilation déclenche l'événement `$gl->on('error', fn (string $m) => ...)` et s'affiche dans la console `[webgl]`.
+- Une erreur de compilation déclenche l'événement `$gl->on('error', fn (string $m) => ...)` et s'affiche sur stderr / dans la console `[opengl]`.
 - `disable()` dans `exit()` : retour à l'affichage SDL seul.
-- **Desktop** : pas de WebGL (le binding SDL n'a pas d'OpenGL), `isAvailable()` vaut false. `Mat4` sert aussi à
-  la 3D logicielle (`Mat4::project()` + `drawLine`) : c'est le repli de `hello-webgl`. `jumpball` remplit ses
-  faces ligne par ligne dans l'ordre du peintre (`App\Gfx\SoftwareView`).
+- En `mediump`, les grands arguments de `sin` / `cos` perdent toute précision (NaN sur certains GPU, Mesa compris) :
+  `sin(3.14159 * fract(x))` plutôt que `sin(x * 500.0)`.
+- Sans GL, `Mat4` sert aussi à la 3D logicielle (`Mat4::project()` + `drawLine`) : c'est le repli de
+  `hello-webgl`. `jumpball` remplit ses faces ligne par ligne dans l'ordre du peintre (`App\Gfx\SoftwareView`).
+
+### Bas niveau : les fonctions gl* — `$this->engine->opengl()`
+
+SDL dessine sa 2D avec le même contexte GL : les appels `gl*` se font entre `begin()` et `end()`. `begin()` dessine
+ce que SDL a en attente, sauvegarde son état GL, lie une cible 3D (taille de la vue, avec profondeur) et l'efface.
+`end()` pose la 3D dans l'image 2D en cours (avec alpha) et rend son état à SDL. On dessine le HUD ensuite.
+
+```php
+$gl = $this->engine->opengl();
+// enter() : les ressources (elles sauvegardent / restaurent l'état elles-mêmes)
+$this->prog = $gl->program($vs, $fs, ['a_pos' => 0, 'a_normal' => 1]);
+$this->vbo = $gl->buffer($floats);               // ou une chaîne pack('g*', ...)
+// render() :
+$r->clear([8, 10, 26]);
+if ($gl->begin([8, 10, 26, 255])) {
+    glUseProgram($this->prog);
+    glBindBuffer(GL_ARRAY_BUFFER, $this->vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, 0, 24, 0);
+    glUniformMatrix4fv(glGetUniformLocation($this->prog, 'u_mvp'), 1, false, $mvp);
+    glDrawArrays(GL_TRIANGLES, 0, $n);
+    $gl->end();
+}
+$this->font()->draw($r, 'HUD', 4, 4);             // la 2D par-dessus
+```
+
+- Jamais de `gl*` hors de `begin()` / `end()` ou des aides du moteur (`program()`, `buffer()`, `updateBuffer()`,
+  `indexBuffer()`, `texture()`, `textureFromRgba()`, `renderTarget()`, `draw()`) : ce serait l'état de SDL qui
+  changerait.
+- `setSupersample(2)` : cible deux fois plus grande, bords plus lisses.
+- Toutes les fonctions et constantes : `engine/stubs/opengl.stub.php`. Exemple : `games/hello-webgl`,
+  scène `RawGlScene`.
+- Tests sans écran : `bin/jumphp test` / `shot` lancent les jeux qui appellent `gl()` / `opengl()` sur Xvfb
+  (Mesa llvmpipe), et les captures montrent la vraie 3D. `JUMPHP_GL=0` force le repli sans GL.
+
+## Son 3D — `$this->engine->audio3d()`
+
+[PHP-OpenAL](https://github.com/Ponup/php-openal) : OpenAL Soft sur le bureau (PulseAudio / PipeWire), Web Audio
+dans le navigateur (l'OpenAL d'emscripten). Les sons sont placés dans l'espace du jeu et entendus depuis un
+auditeur, en général la caméra :
+
+```php
+$a = $this->engine->audio3d();
+$a->synth('bip', Synth::tone(880, 0.2));                   // ou load('moteur', 'assets/sfx/moteur.wav')
+$a->listener([$camX, $camY, $camZ], [0, 0, -1]);           // à chaque frame : position, direction (haut = +y)
+$voix = $a->play('bip', [$x, 0, $z], 1.0, 1.0, true);      // gain, pitch, boucle
+$a->move($voix, [$x, 0, $z]);                              // suivre la source
+$a->stop($voix);
+```
+
+Les WAV stéréo sont mélangés en mono (OpenAL ne place que le mono dans l'espace). Le volume et la coupure du son
+suivent SoundManager. `setDistance($reference, $rolloff, $max)` règle l'atténuation. La musique et les bruitages
+simples restent dans SoundManager. Sans périphérique (tests), le moteur prend la sortie muette d'OpenAL Soft
+(`ALSOFT_DRIVERS=null`).
 
 ## Cycle de vie — `$this->engine->lifecycle()`
 

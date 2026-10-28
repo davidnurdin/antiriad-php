@@ -75,7 +75,7 @@ game_runtime() {
 runtime_image() { [ "$(game_runtime "$1")" = async ] && echo "$ASYNC_IMAGE" || echo "$DESKTOP_IMAGE"; }
 
 ensure_desktop_image() {
-  docker image inspect "$DESKTOP_IMAGE" >/dev/null 2>&1 || { say "building $DESKTOP_IMAGE (first time, ~3 min)"; docker build -t "$DESKTOP_IMAGE" docker/desktop; }
+  docker image inspect "$DESKTOP_IMAGE" >/dev/null 2>&1 || { say "building $DESKTOP_IMAGE (first time, ~3 min)"; docker build -t "$DESKTOP_IMAGE" --build-context ext=docker/ext docker/desktop; }
 }
 
 # php_run <workdir repo-relative> [docker flags...] -- <command...>
@@ -86,7 +86,7 @@ php_run() {
   [ "${1:-}" = "--" ] && shift
   local image; image="$(runtime_image "$wd")"
   if [ "$image" = "$ASYNC_IMAGE" ]; then
-    docker image inspect "$ASYNC_IMAGE" >/dev/null 2>&1 || { say "building $ASYNC_IMAGE (PHP 8.6 ZTS + TrueAsync, first time ~15 min)"; docker build -t "$ASYNC_IMAGE" docker/desktop-async; }
+    docker image inspect "$ASYNC_IMAGE" >/dev/null 2>&1 || { say "building $ASYNC_IMAGE (PHP 8.6 ZTS + TrueAsync, first time ~15 min)"; docker build -t "$ASYNC_IMAGE" --build-context ext=docker/ext docker/desktop-async; }
   else
     ensure_desktop_image
   fi
@@ -95,6 +95,15 @@ php_run() {
     -e HOME=/tmp -e COMPOSER_HOME=/tmp/composer -e COMPOSER_CACHE_DIR=/workspace/.cache/composer \
     ${flags[@]+"${flags[@]}"} "$image" "$@"
 }
+
+# headless OpenGL: JUMPHP_GL=1|0, else on when the game's code uses the engine's gl() / opengl().
+# The run gets a real window on Xvfb (Mesa llvmpipe) instead of the SDL dummy driver.
+gl_flags() {
+  local on="${JUMPHP_GL:-}"
+  [ -n "$on" ] || { grep -rqE -- '->(gl|opengl)\(\)' "$ROOT/$1/src" 2>/dev/null && on=1 || on=0; }
+  [ "$on" = 1 ] && echo "-e JUMPHP_HEADLESS_GL=1 -e SDL_VIDEODRIVER=x11"
+}
+gl_wrap() { [ -n "$(gl_flags "$1")" ] && echo "jumphp-xvfb"; }   # docker/ext/jumphp-xvfb
 
 ensure_vendor() {
   local dir="$1"
@@ -106,12 +115,12 @@ ensure_vendor() {
 
 cmd_setup() {
   say "desktop runtime image ($DESKTOP_IMAGE)"
-  docker build -t "$DESKTOP_IMAGE" docker/desktop
+  docker build -t "$DESKTOP_IMAGE" --build-context ext=docker/ext docker/desktop
   say "relay server image"
   docker compose build relay
   if [ "${1:-}" = async ]; then
     say "async runtime image ($ASYNC_IMAGE: PHP 8.6 ZTS + TrueAsync, ~15 min)"
-    docker build -t "$ASYNC_IMAGE" docker/desktop-async
+    docker build -t "$ASYNC_IMAGE" --build-context ext=docker/ext docker/desktop-async
   fi
   say "done. Next: bin/jumphp engine:build (browser engine), bin/jumphp run pong"
 }
@@ -192,10 +201,11 @@ cmd_test() {
     say "$dir: phpunit"
     php_run "$dir" -e SDL_VIDEODRIVER=dummy -e SDL_AUDIODRIVER=dummy -- /workspace/engine/vendor/bin/phpunit --bootstrap vendor/autoload.php tests
   fi
-  say "$dir: headless smoke test (${JUMPHP_MAX_FRAMES:-600} frames)"
-  php_run "$dir" -e JUMPHP_SMOKE=1 -e "JUMPHP_MAX_FRAMES=${JUMPHP_MAX_FRAMES:-600}" \
+  say "$dir: headless smoke test (${JUMPHP_MAX_FRAMES:-600} frames$([ -n "$(gl_flags "$dir")" ] && echo ', OpenGL on Xvfb'))"
+  # shellcheck disable=SC2046
+  php_run "$dir" $(gl_flags "$dir") -e JUMPHP_SMOKE=1 -e "JUMPHP_MAX_FRAMES=${JUMPHP_MAX_FRAMES:-600}" \
     -e "JUMPHP_SCENE=${JUMPHP_SCENE:-}" -e "JUMPHP_SCENE_PARAMS=${JUMPHP_SCENE_PARAMS:-}" -e "JUMPHP_INPUT=${JUMPHP_INPUT:-}" \
-    -- php app.php
+    -- $(gl_wrap "$dir") php app.php
   say "$dir: all checks passed"
 }
 
@@ -204,9 +214,10 @@ cmd_shot() {
   local frames="${2:-120}" out="${3:-var/screenshots/shot.png}"
   ensure_vendor "$dir"
   rm -f "$ROOT/$dir/${out%.png}"-[0-9]*.png   # frames of an earlier JUMPHP_SHOT_EVERY run
-  php_run "$dir" -e "JUMPHP_SCREENSHOT=$out" -e "JUMPHP_MAX_FRAMES=$frames" -e "JUMPHP_SHOT_EVERY=${JUMPHP_SHOT_EVERY:-0}" \
+  # shellcheck disable=SC2046
+  php_run "$dir" $(gl_flags "$dir") -e "JUMPHP_SCREENSHOT=$out" -e "JUMPHP_MAX_FRAMES=$frames" -e "JUMPHP_SHOT_EVERY=${JUMPHP_SHOT_EVERY:-0}" \
     -e "JUMPHP_SCENE=${JUMPHP_SCENE:-}" -e "JUMPHP_SCENE_PARAMS=${JUMPHP_SCENE_PARAMS:-}" -e "JUMPHP_INPUT=${JUMPHP_INPUT:-}" \
-    -- php app.php
+    -- $(gl_wrap "$dir") php app.php
   echo "$ROOT/$dir/$out"
 }
 

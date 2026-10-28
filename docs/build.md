@@ -4,8 +4,8 @@ Seul Docker est nécessaire. Images utilisées :
 
 | Image | Rôle | Construite par |
 |---|---|---|
-| `jumphp/desktop:dev` | PHP 8.3 CLI + extensions SDL (mêmes forks et commits que le moteur wasm) + GD, composer | `bin/jumphp setup` (`docker/desktop/Dockerfile`) |
-| `jumphp/desktop-async:dev` | PHP 8.6 ZTS (fork TrueAsync) + `ext/async` + libuv + les mêmes extensions SDL (avec `php86-compat.h`), pour les jeux `runtime: async` ([async.md](async.md)) | `bin/jumphp setup async` ou au premier usage (`docker/desktop-async/Dockerfile`, ~15 min) |
+| `jumphp/desktop:dev` | PHP 8.3 CLI + extensions SDL, OpenGL et OpenAL (mêmes forks, commits et patch que le moteur wasm) + GD, composer, Xvfb (OpenGL sans écran : `jumphp-xvfb`) | `bin/jumphp setup` (`docker/desktop/Dockerfile`) |
+| `jumphp/desktop-async:dev` | PHP 8.6 ZTS (fork TrueAsync) + `ext/async` + libuv + les mêmes extensions SDL, OpenGL et OpenAL (avec `php86-compat.h`), pour les jeux `runtime: async` ([async.md](async.md)) | `bin/jumphp setup async` ou au premier usage (`docker/desktop-async/Dockerfile`, ~15 min) |
 | moteur wasm (sortie fichiers, pas d'image) | `build/engine/php-web.{mjs,wasm}`, `php-wasm-network.js`, `engine.json` | `bin/jumphp engine:build` (`docker/engine-wasm`, buildx bake, cache `.cache/buildx-engine`) |
 | `emscripten/emsdk:3.1.35` | `file_packager` (données du jeu) | téléchargée |
 | `jumphp/relay:dev` | serveur relais php-wasm-network | `bin/jumphp relay up` (`docker/relay`) |
@@ -16,9 +16,25 @@ Seul Docker est nécessaire. Images utilisées :
 
 Repris de php-wasm-sdl : `emscripten/emsdk:3.1.35`, PHP-8.3.0 (SAPI embed, statique), extensions
 `davidnurdin/php-sdl`, `kea/php-sdl-image`, `kea/php-sdl-mixer`, `kea/php-sdl-ttf` (leurs `config.m4`
-remplacés pour lier les ports emscripten `-sUSE_SDL*=2`), `wasmnet` de php-wasm-network ; GD (PNG),
+remplacés pour lier les ports emscripten `-sUSE_SDL*=2`), `wasmnet` de php-wasm-network,
+[`Ponup/php-opengl`](https://github.com/Ponup/php-opengl) (OpenGL → WebGL 1, `-lGL`) et
+[`Ponup/php-openal`](https://github.com/Ponup/php-openal) (OpenAL → Web Audio, `-lopenal`) ; GD (PNG),
 mbstring, bcmath, ctype, zlib, tokenizer. Tous les dépôts sont épinglés par commit (`ARG *_REF`, les
-mêmes dans `docker/desktop/Dockerfile` et `docker/relay/Dockerfile`).
+mêmes dans `docker/desktop/Dockerfile`, `docker/desktop-async/Dockerfile` et `docker/relay/Dockerfile`).
+
+`docker/ext/` est partagé par ces builds (contexte nommé `ext` : `--build-context ext=docker/ext`, et
+`contexts` dans `docker-bake.hcl`) :
+- `php-opengl.patch` : ce que le moteur ajoute à PHP-OpenGL. Les framebuffers ; `glGetIntegerv` / `glGetFloatv`
+  (sauvegarde de l'état de SDL) ; `glGetActiveUniform` ; les uniforms 2f, 4f, 2i à 4i, 1fv à 4fv et Matrix3fv ;
+  `glBufferSubData`, `glReadPixels` et `glCopyTexSubImage2D`. Les tampons et les pixels peuvent être des chaînes
+  binaires (`pack('g*', ...)`) ou `null`. Les erreurs de shader deviennent des warnings (elles étaient fatales),
+  et les fonctions `glDelete*`, vides dans l'original, sont écrites. Enfin, sous emscripten, les fonctions absentes
+  de WebGL (`glPolygonMode`, `glDrawBuffer`, `glPointSize`…) deviennent des warnings. Le régénérer : appliquer le
+  patch sur le commit épinglé, modifier, `git diff > docker/ext/php-opengl.patch`.
+- `jumphp-xvfb` : lance une commande avec un écran X virtuel (Xvfb, OpenGL Mesa llvmpipe), pour les tests et
+  les captures des jeux 3D (`bin/jumphp test` / `shot`). `xvfb-run` se bloque quand le conteneur tourne avec un
+  utilisateur ordinaire.
+- `engine/stubs/opengl.stub.php` et `openal.stub.php` sont générés depuis les extensions : `bin/jumphp php . tools/gl-stubs.php`.
 
 Points importants :
 - `CFLAGS="-O2 ..."` au configure : sans lui PHP compile en `-O0` (7 à 12 fois plus lent).

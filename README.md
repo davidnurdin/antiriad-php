@@ -93,10 +93,12 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 
 ### Comment ça marche
 
-- **Bureau** : PHP 8.3 CLI + extensions SDL2 / SDL_image / SDL_mixer / SDL_ttf, dans Docker, avec
+- **Bureau** : PHP 8.3 CLI + extensions SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL
+  ([php-opengl](https://github.com/Ponup/php-opengl)) et OpenAL ([php-openal](https://github.com/Ponup/php-openal)), dans Docker, avec
   l'affichage et le son de l'hôte. Boucle ReactPHP, conteneur Symfony DI, événements Evenement.
 - **Navigateur** : le même PHP 8.3 et les mêmes extensions compilés en WebAssembly avec emscripten
-  ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)). Le navigateur appelle une frame PHP par
+  ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)) : OpenGL devient WebGL, OpenAL devient Web Audio, et la 3D
+  s'écrit une seule fois pour les deux cibles. Le navigateur appelle une frame PHP par
   `requestAnimationFrame`. Les sauvegardes vont dans IndexedDB. Le jeu est un dossier statique.
 - **Réseau** : [php-wasm-network](https://github.com/davidnurdin/php-wasm-network) — même API en natif et
   dans le navigateur (WebSocket / WebRTC), avec son serveur relais.
@@ -120,7 +122,7 @@ seulement dans `var/`.
 - [docs/tiles-collisions.md](docs/tiles-collisions.md) : cartes Tiled, masques, pentes, plateformes
 - [docs/reseau.md](docs/reseau.md) : multijoueur en ligne, serveur relais, tests
 - [docs/async.md](docs/async.md) : threads avec TrueAsync, runtime async, état du navigateur
-- [docs/api-web.md](docs/api-web.md) : WebGL, mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
+- [docs/api-web.md](docs/api-web.md) : OpenGL / WebGL, son 3D (OpenAL), mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
 - [docs/portail.md](docs/portail.md) : le futur site qui regroupera les jeux
 
@@ -215,10 +217,12 @@ breaker was written that way, by an AI that had only read this file.
 
 ### How it works
 
-- **Desktop**: PHP 8.3 CLI + SDL2 / SDL_image / SDL_mixer / SDL_ttf extensions, in Docker, using the host's
+- **Desktop**: PHP 8.3 CLI + SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL ([php-opengl](https://github.com/Ponup/php-opengl))
+  and OpenAL ([php-openal](https://github.com/Ponup/php-openal)) extensions, in Docker, using the host's
   display and sound. ReactPHP loop, Symfony DI container, Evenement events.
 - **Browser**: the same PHP 8.3 and extensions compiled to WebAssembly with emscripten
-  ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)). The browser calls one PHP frame per
+  ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)): OpenGL becomes WebGL, OpenAL becomes Web Audio, and 3D
+  code is written once for both targets. The browser calls one PHP frame per
   `requestAnimationFrame`. Saves go to IndexedDB. The game is a static folder.
 - **Network**: [php-wasm-network](https://github.com/davidnurdin/php-wasm-network) — same API natively and
   in the browser (WebSocket / WebRTC), with its relay server.

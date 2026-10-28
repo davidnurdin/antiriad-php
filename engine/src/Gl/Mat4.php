@@ -4,7 +4,7 @@ namespace JumPHP\Gl;
 
 /**
  * 4x4 matrices as 16 floats in column-major order (what GLSL uniforms expect), for WebGl::draw() and for
- * software 3D (transform() + Renderer::drawLine: the desktop fallback of a WebGL game).
+ * software 3D (transform() + Renderer::drawLine: the fallback of a 3D game without OpenGL).
  *
  *   $mvp = Mat4::multiply(Mat4::perspective(60, 16 / 9, 0.1, 100),
  *          Mat4::multiply(Mat4::lookAt([0, 1, 4], [0, 0, 0]), Mat4::rotateY($t)));

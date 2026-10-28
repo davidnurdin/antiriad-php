@@ -34,6 +34,7 @@ final class TitleScene extends MenuScene
     {
         $items = [
             ['START', null, fn () => $this->scenes()->switchTo(CubesScene::class)],
+            ['RAW OPENGL', null, fn () => $this->scenes()->switchTo(RawGlScene::class)],
         ];
         // installable app (game.yaml pwa): the browser's install question, or the newer build
         $pwa = $this->engine->pwa();

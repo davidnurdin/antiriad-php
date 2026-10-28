@@ -3,8 +3,10 @@
 namespace JumPHP\Tests\Gl;
 
 use JumPHP\Gl\Mat4;
+use JumPHP\Gl\OpenGl;
 use JumPHP\Gl\WebGl;
-use JumPHP\Bridge\JsBridge;
+use JumPHP\Kernel\GameConfig;
+use JumPHP\Renderer\Sdl;
 use PHPUnit\Framework\TestCase;
 
 final class Mat4Test extends TestCase
@@ -29,12 +31,25 @@ final class Mat4Test extends TestCase
         self::assertNull(Mat4::project($mvp, [0, 0, 10], 320, 180));
     }
 
-    public function testWebGlDoesNothingOnDesktop(): void
+    public function testWithoutGlContextEverythingIsANoOp(): void
     {
-        $gl = new WebGl(new JsBridge());
+        // no window (SDL not initialised): no GL context, every call returns 0 / does nothing
+        $opengl = new OpenGl(new Sdl(new GameConfig([], '/tmp')));
+        $gl = new WebGl($opengl);
         self::assertFalse($gl->isAvailable());
+        self::assertFalse($opengl->begin());
         $gl->setLayer();
-        $gl->draw($gl->program('a', 'b'), ['count' => 3]);
-        self::assertFalse(is_file(WebGl::FILE) && filemtime(WebGl::FILE) >= time() - 1);
+        $gl->setPostShader('void main() { gl_FragColor = vec4(1.0); }');
+        self::assertSame(0, $gl->program('a', 'b'));
+        self::assertSame(0, $gl->buffer([1.0, 2.0, 3.0]));
+        $gl->draw(1, ['count' => 3]);
+        $gl->clear([0, 0, 0]);
+    }
+
+    public function testVersionedShaders(): void
+    {
+        self::assertStringStartsWith("#version 100\n", OpenGl::versioned("void main() {}"));
+        self::assertSame("#version 100\nvoid main() {}", OpenGl::versioned("#version 100\nvoid main() {}"));
+        self::assertSame("// x\n#version 300 es\n", OpenGl::versioned("// x\n#version 300 es\n"));
     }
 }

@@ -103,6 +103,9 @@ class Lifecycle extends EventEmitter
     /** @internal desktop: SDL_WINDOWEVENT (InputManager 'window') */
     public function windowEvent(int $event, int $a = 0, int $b = 0): void
     {
+        if (\JumPHP\Kernel\Platform::isHeadless()) {
+            return;         // headless OpenGL runs have a window on Xvfb: never focused, nobody to pause for
+        }
         switch ($event) {
             case \SDL_WINDOWEVENT_MINIMIZED:
             case \SDL_WINDOWEVENT_HIDDEN:

@@ -10,7 +10,8 @@ use JumPHP\Scene\AbstractScene;
 
 /**
  * Cubes turning over a floor. Browser: real 3D with WebGL (a layer behind the 2D: the HUD is plain SDL drawing),
- * plus a post-processing shader chosen with Space. Desktop (no WebGL): the same scene in software wireframe,
+ * plus a post-processing shader chosen with Space (OpenGL on the desktop, WebGL in the browser: the same calls).
+ * Without OpenGL (headless with JUMPHP_GL=0, no GPU): the same scene in software wireframe,
  * with the same matrices (Mat4::project).
  */
 final class CubesScene extends AbstractScene
@@ -199,7 +200,7 @@ final class CubesScene extends AbstractScene
         $gl = $this->gl();
         $r->fillRect(0, 0, $this->width(), 11, [0, 0, 0]);
         $font->draw($r, 'HELLO WEBGL', 3, 2, 1, [255, 210, 63]);
-        $mode = $gl->isAvailable() ? 'WEBGL  SHADER: ' . array_keys(Shaders::POST)[$this->shader] : 'NO WEBGL: SOFTWARE 3D';
+        $mode = $gl->isAvailable() ? 'WEBGL  SHADER: ' . array_keys(Shaders::POST)[$this->shader] : 'NO OPENGL: SOFTWARE 3D';
         $font->draw($r, $mode, $this->width() - 3, 2, 1, [200, 220, 255], 'right');
         $r->fillRect(0, $this->height() - 11, $this->width(), 11, [0, 0, 0]);
         $pad = $this->engine->input->getGamepad();

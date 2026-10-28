@@ -2,7 +2,7 @@
 # + wasmnet (php-wasm-network) compiled with emscripten. Output: php-web.mjs + php-web.wasm.
 # The engine is shared by every game: build it once (`bin/jumphp engine:build`, ~25 min cold, cached after).
 #
-# The extension refs MUST match docker/desktop/Dockerfile (same SDL API on desktop and in the browser),
+# The extension refs MUST match docker/desktop/Dockerfile (same SDL / OpenGL / OpenAL API on desktop and in the browser),
 # The browser bridge php-wasm-network.js is shipped WITH the engine (same NETWORK_REF as the wasmnet extension),
 # so the JS side always matches the C side; engine/composer.json pins the same commit for the PHP classes.
 FROM emscripten/emsdk:3.1.35 AS build_tool
@@ -18,6 +18,8 @@ ARG SDL_IMAGE_REF=fd798eb2c52b7be5874a30334d1d255436aa686e
 ARG SDL_MIXER_REF=f75a31826f4484bb4af31c1a1a4cdf1463aae8b2
 ARG SDL_TTF_REF=d2c634c509aa0b14168f55128435d9519d34d0e3
 ARG NETWORK_REF=a898904e58d445501dc98e5d2cf029632c449618
+ARG PHP_OPENGL_REF=438798d5f0a5347a59d13252611556792cc2a1b8
+ARG PHP_OPENAL_REF=6f78e95120ffe2cd30813a78ca66eaedde310314
 
 RUN git clone https://github.com/php/php-src.git /src/php-src --branch $PHP_BRANCH --single-branch --depth 1
 
@@ -29,6 +31,8 @@ RUN set -eux; \
     fetch kea/php-sdl-mixer             "$SDL_MIXER_REF" /src/php-src/ext/sdl_mixer; \
     fetch kea/php-sdl-ttf               "$SDL_TTF_REF"   /src/php-src/ext/sdl_ttf; \
     fetch davidnurdin/php-wasm-network  "$NETWORK_REF"   /src/php-wasm-network; \
+    fetch Ponup/php-opengl              "$PHP_OPENGL_REF" /src/php-src/ext/opengl; \
+    fetch Ponup/php-openal              "$PHP_OPENAL_REF" /src/php-src/ext/openal; \
     mkdir -p /src/php-src/ext/sdl; \
     cp -r /tmp/php-sdl/src/* /src/php-src/ext/sdl/; \
     cp -r /src/php-wasm-network/ext/wasmnet /src/php-src/ext/wasmnet
@@ -38,6 +42,12 @@ COPY config-sdl.m4       /src/php-src/ext/sdl/config.m4
 COPY config-sdl_image.m4 /src/php-src/ext/sdl_image/config.m4
 COPY config-sdl_mixer.m4 /src/php-src/ext/sdl_mixer/config.m4
 COPY config-sdl_ttf.m4   /src/php-src/ext/sdl_ttf/config.m4
+COPY config-opengl.m4    /src/php-src/ext/opengl/config.m4
+COPY config-openal.m4    /src/php-src/ext/openal/config.m4
+# docker/ext (named build context "ext"): the JumPHP additions to PHP-OpenGL (framebuffers, state queries,
+# uniforms, binary pixels, ES / WebGL guards)
+COPY --from=ext php-opengl.patch /tmp/php-opengl.patch
+RUN cd /src/php-src/ext/opengl && git apply /tmp/php-opengl.patch
 
 FROM php_src AS php-wasm
 ARG OPTIMIZE=-O3
@@ -59,7 +69,7 @@ RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache cd /src/php-src &
         CFLAGS="-O2 -s USE_ZLIB=1 -s USE_LIBPNG=1" LDFLAGS="-s USE_ZLIB=1 -s USE_LIBPNG=1" \
         PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig/" \
         --enable-embed=static --with-layout=GNU \
-        --enable-sdl --with-sdl_image --enable-sdl_ttf --with-sdl_mixer --enable-wasmnet \
+        --enable-sdl --with-sdl_image --enable-sdl_ttf --with-sdl_mixer --enable-wasmnet --enable-opengl --enable-openal \
         --enable-gd --with-png \
         --disable-all --disable-cgi --disable-cli --disable-phpdbg --disable-opcache --disable-fiber-asm \
         --disable-rpath --without-pear --with-valgrind=no --without-pcre-jit --disable-mbregex \
@@ -85,11 +95,11 @@ RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache mkdir /build && c
         -s INITIAL_MEMORY=$INITIAL_MEMORY -s MAXIMUM_MEMORY=2gb -s ALLOW_MEMORY_GROWTH=1 \
         -s EXIT_RUNTIME=0 -s ASSERTIONS=$ASSERTIONS -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
         -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXPORT_NAME=createPhpModule -s INVOKE_RUN=0 -s LZ4=1 \
-        -lidbfs.js \
+        -lidbfs.js -lopenal -lGL \
         --js-library /src/php-wasm-network/js/library_wasmnet.js \
         /src/phpw.o .libs/libphp.a \
     && cp /src/php-wasm-network/js/php-wasm-network.js /build/ \
-    && echo "{\"php\":\"8.3\",\"network\":\"$NETWORK_REF\"}" > /build/engine.json
+    && echo "{\"php\":\"8.3\",\"network\":\"$NETWORK_REF\",\"opengl\":true,\"openal\":true}" > /build/engine.json
 
 FROM scratch
 COPY --from=php-wasm /build/ .

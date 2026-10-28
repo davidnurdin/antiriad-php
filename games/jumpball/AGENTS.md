@@ -5,7 +5,8 @@ This game is built with JumPHP. **Read `../../AGENTS.md` first** (rules, command
 ## Checklist
 
 ```bash
-bin/jumphp test jumpball                 # lint + phpstan + headless smoke test (the bot plays, desktop software 3D)
+bin/jumphp test jumpball                 # lint + phpstan + headless smoke test (the bot plays, OpenGL on Xvfb)
+JUMPHP_GL=0 bin/jumphp test jumpball     # the same without OpenGL: SoftwareView
 bin/jumphp shot jumpball 90              # title screen over the bot's run
 JUMPHP_SCENE='App\Scene\PlayScene' JUMPHP_SCENE_PARAMS='{"demo":true,"seed":3}' bin/jumphp shot jumpball 900 var/screenshots/play.png
 bin/jumphp build jumpball && bin/jumphp webshot jumpball 8 '[[1,"Enter"],[3,"ArrowLeft"]]'   # WebGL
@@ -22,10 +23,10 @@ bin/jumphp build jumpball && bin/jumphp webshot jumpball 8 '[[1,"Enter"],[3,"Arr
     enough to land on.
   - `Run`: the ball (fixed step 120 Hz from the scenes), states run / fall / crash / over, events read by the
     scene for sounds, and `autopilot()` (the bot of the title screen, the demo and the smoke test).
-- **Drawing** (`src/Gfx`): `World` (a shared service) draws a `Run`. Browser: WebGL layer below the 2D
+- **Drawing** (`src/Gfx`): `World` (a shared service) draws a `Run`. OpenGL / WebGL layer below the 2D
   (`KEY` magenta), the track in chunks of 16 rows, one dynamic buffer each, recycled with `updateBuffer()`
   when a chunk leaves the view, meshes and GLSL in `Meshes` (vertex = position, colour, normal), sky =
-  full-screen quad shader, post shader = vignette. Desktop: `SoftwareView` (same camera matrix, convex faces
+  full-screen quad shader, post shader = vignette. Without OpenGL: `SoftwareView` (same camera matrix, convex faces
   filled per pixel row, far to near, the ball after its row).
 - **Scenes**: `TitleScene` (menu over the bot's run) → `PlayScene` (params `demo`, `seed`) → `GameOverScene`
   (overlay: retry / title); `PauseScene` (overlay, also `pause_scene` of game.yaml), `OptionsScene` (pushed).

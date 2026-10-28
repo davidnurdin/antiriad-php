@@ -85,7 +85,8 @@ final class Meshes
             vec3 color = texture2D(u_frame, v_uv).rgb;
             vec2 d = v_uv - 0.5;
             color *= 1.0 - dot(d, d) * 0.7;
-            float line = sin(v_uv.y * u_view.y * 3.14159 * u_resolution.y / u_viewport.w);
+            // one dark line per game pixel row; fract() keeps sin() precise in mediump
+            float line = sin(3.14159 * fract(v_uv.y * u_view.y * u_resolution.y / u_viewport.w));
             color *= 0.9 + 0.1 * line * line;
             gl_FragColor = vec4(color * 1.08, 1.0);
         }

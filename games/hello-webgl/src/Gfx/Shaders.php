@@ -51,7 +51,7 @@ final class Shaders
                 vec2 uv = v_uv + c * dot(c, c) * 0.04;            // curved glass
                 if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
                 vec3 color = texture2D(u_frame, uv).rgb;
-                float line = sin(uv.y * u_view.y * 3.14159 * u_resolution.y / u_viewport.w);
+                float line = sin(3.14159 * fract(uv.y * u_view.y * u_resolution.y / u_viewport.w));   // fract: precise in mediump
                 color *= 0.75 + 0.25 * line * line;               // scanlines (one per game pixel row)
                 color *= 1.0 - 0.35 * dot(c, c);                  // vignette
                 gl_FragColor = vec4(color * 1.15, 1.0);

@@ -22,6 +22,8 @@ class Sdl
     private ?Window $window = null;
     private ?Renderer $renderer = null;
     private $headlessSurface = null;
+    /** Headless with OpenGL (JUMPHP_HEADLESS_GL=1, under Xvfb): the last presented picture, RGBA rows bottom first */
+    private ?string $glFrame = null;
 
     /** @var array<string, array<int, array{texture: mixed, width: int, height: int, x: int}>> */
     private array $textures = [];
@@ -43,6 +45,18 @@ class Sdl
             }
         }
 
+        if (Platform::isHeadless() && Platform::setting('JUMPHP_HEADLESS_GL') && extension_loaded('OpenGL')) {
+            // headless with OpenGL (bin/jumphp runs it under Xvfb): a real window, screenshots read back with GL
+            $this->window = new Window($width * 2, $height * 2, $title, false);
+            $this->renderer = new Renderer($this->window->getWindow(), $width, $height, false);
+            if (!$this->renderer->isSoftware()) {
+                $this->renderer->setCapture(function (Renderer $r): void {
+                    [$w, $h] = $r->outputSize();
+                    $this->glFrame = $w . 'x' . $h . ':' . glReadPixels(0, 0, $w, $h, GL_RGBA, GL_UNSIGNED_BYTE);
+                });
+            }
+            return;
+        }
         if (Platform::isHeadless()) {
             // smoke tests and screenshots: software renderer drawing into a surface, no window
             $this->headlessSurface = \SDL_CreateRGBSurface(0, $width * 2, $height * 2, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0);
@@ -72,6 +86,9 @@ class Sdl
     /** Headless only: writes what was last presented to a PNG file. */
     public function saveScreenshot(string $pngFile): bool
     {
+        if ($this->glFrame !== null) {
+            return $this->saveGlFrame($pngFile);
+        }
         if ($this->headlessSurface === null) {
             return false;
         }
@@ -81,6 +98,28 @@ class Sdl
         @unlink($bmp);
         if ($image === false) {
             return false;
+        }
+        @mkdir(dirname($pngFile), 0777, true);
+        return imagepng($image, $pngFile);
+    }
+
+    /** No GPU renderer: no OpenGL context. */
+    public function isSoftware(): bool
+    {
+        return $this->renderer === null || $this->renderer->isSoftware();
+    }
+
+    private function saveGlFrame(string $pngFile): bool
+    {
+        [$size, $pixels] = explode(':', (string)$this->glFrame, 2);
+        [$w, $h] = array_map('intval', explode('x', $size));
+        $image = imagecreatetruecolor($w, $h);
+        for ($y = 0; $y < $h; $y++) {
+            $row = ($h - 1 - $y) * $w * 4;
+            for ($x = 0; $x < $w; $x++) {
+                $o = $row + $x * 4;
+                imagesetpixel($image, $x, $y, (ord($pixels[$o]) << 16) | (ord($pixels[$o + 1]) << 8) | ord($pixels[$o + 2]));
+            }
         }
         @mkdir(dirname($pngFile), 0777, true);
         return imagepng($image, $pngFile);

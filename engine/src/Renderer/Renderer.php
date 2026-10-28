@@ -26,6 +26,13 @@ class Renderer
     private array $letterbox = [0, 0, 0, 0];
     /** @var array<int, callable> drawn after the scaled view, at window resolution */
     private array $overlays = [];
+    /** @var array<int, callable(Renderer): void> end of the frame, the view texture still the target (OpenGL compositing) */
+    private array $viewHooks = [];
+    /** @var array<int, callable(Renderer): void> end of the frame, the view just copied to the window, before the overlays */
+    private array $windowHooks = [];
+    /** @var (callable(Renderer): void)|null right before the picture is presented (headless OpenGL screenshots) */
+    private $capture = null;
+    private bool $software = false;
     /** @var resource|object|null */
     private $window = null;
 
@@ -36,12 +43,14 @@ class Renderer
         $this->window = $window;
         if ($surface !== null) {
             $this->renderer = \SDL_CreateSoftwareRenderer($surface);
+            $this->software = true;
         } else {
             $flags = \SDL_RENDERER_ACCELERATED | ($vsync ? \SDL_RENDERER_PRESENTVSYNC : 0);
             $this->renderer = \SDL_CreateRenderer($window, -1, $flags);
             if (!$this->renderer) {
                 // no GPU (VM, remote X): software rendering still works
                 $this->renderer = \SDL_CreateRenderer($window, -1, \SDL_RENDERER_SOFTWARE);
+                $this->software = true;
             }
         }
         if (!$this->renderer) {
@@ -107,15 +116,62 @@ class Renderer
 
     public function endFrame(): void
     {
+        $this->setTarget($this->viewTexture);
+        foreach ($this->viewHooks as $hook) {
+            $hook($this);
+        }
         $this->setTarget(null);
         \SDL_SetRenderDrawColor($this->renderer, 0, 0, 0, 255);
         \SDL_RenderClear($this->renderer);
         [$x, $y, $w, $h] = $this->letterbox = $this->computeLetterbox();
         \SDL_RenderCopy($this->renderer, $this->viewTexture, null, new \SDL_Rect($x, $y, $w, $h));
+        foreach ($this->windowHooks as $hook) {
+            $hook($this);
+        }
         foreach ($this->overlays as $overlay) {
             $overlay($this);
         }
+        if ($this->capture !== null) {
+            $this->flush();
+            ($this->capture)($this);
+        }
         \SDL_RenderPresent($this->renderer);
+    }
+
+    /** No GPU renderer (headless surface, or no accelerated driver): no OpenGL context either. */
+    public function isSoftware(): bool
+    {
+        return $this->software;
+    }
+
+    /**
+     * Draws what SDL has queued (render batching) now: raw OpenGL calls come after it. Switching the target
+     * flushes SDL's queue (the binding has no SDL_RenderFlush).
+     */
+    public function flush(): void
+    {
+        $target = $this->currentTarget;
+        \SDL_SetRenderTarget($this->renderer, $target === null ? $this->viewTexture : null);
+        \SDL_SetRenderTarget($this->renderer, $target);
+    }
+
+    /**
+     * $hook(Renderer) at the end of each frame: 'view' = the view texture is the target (before it is scaled),
+     * 'window' = the window is the target (the view already copied, before the overlays).
+     */
+    public function addFrameHook(string $where, callable $hook): void
+    {
+        if ($where === 'view') {
+            $this->viewHooks[] = $hook;
+        } else {
+            $this->windowHooks[] = $hook;
+        }
+    }
+
+    /** @param (callable(Renderer): void)|null $capture */
+    public function setCapture(?callable $capture): void
+    {
+        $this->capture = $capture;
     }
 
     /** $draw(Renderer) runs after the view is scaled: draws at window resolution (sharp UI, debug). */

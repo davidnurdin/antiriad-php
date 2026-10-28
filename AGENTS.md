@@ -2,8 +2,9 @@
 
 You are working in **JumPHP**, a framework to write **retro 2D games in PHP**. The same PHP code runs:
 
-- on the **desktop** (native PHP 8.3 + SDL2 extensions, in Docker, in a real window with sound),
-- in the **browser** (PHP 8.3 + SDL2 compiled to WebAssembly; the game is a static web page).
+- on the **desktop** (native PHP 8.3 + SDL2 / OpenGL / OpenAL extensions, in Docker, in a real window with sound),
+- in the **browser** (the same PHP 8.3 + extensions compiled to WebAssembly: OpenGL = WebGL, OpenAL = Web Audio;
+  the game is a static web page).
 
 Everything (PHP, composer, emscripten, web server, relay server, tests) runs **in Docker** through one
 command: `bin/jumphp`. Never install PHP, extensions, emscripten or node on the host; never run `php` or
@@ -29,26 +30,27 @@ engine/                 the framework: composer package jumphp/engine, namespace
   src/Entity/           Entity, GameObject, EntityManager, traits Sprite and Gravity
   src/Physics/          CollisionSystem (tiles), Aabb (boxes), TileCollision trait, CollisionResult
   src/Tile/             TileMap, TileSet, CollisionMask, TileMapRenderer, TiledJsonLoader, ArrayLoader, BinaryLoader
-  src/Audio/            SoundManager, Synth (generated sounds)
+  src/Audio/            SoundManager, Synth (generated sounds), Audio3d (positional sound: OpenAL)
   src/Ui/               Menu, MenuScene, TextInput, Hud
   src/Net/              NetSession, LobbyScene, MessageCodec, SnapshotBuffer
   src/Save/             Storage, Options
   src/Async/            Tasks, Pool, Task, TaskFailed, WebWorkers, Worker (threads / Web Workers / between frames)
   src/Bridge/           JsBridge (game <-> web page, synchronous with the frames)
   src/Device/           Lifecycle (hide/show/blur/close...), Device (phone features), Pwa (installable, offline)
-  src/Gl/               WebGl (shaders, 3D layer, post-processing in the browser), Mat4
+  src/Gl/               OpenGl (raw PHP-OpenGL in SDL's context), WebGl (3D layer + post-processing), Mat4
   src/Http/             Http (async requests: fetch / curl / sockets), HttpResponse, HttpError
   src/Util/             Color, Math, Time, Lang, Vector
   bootstrap/wasm.php    browser entry point
-  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js, jumphp-gl.js,
+  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js,
                         jumphp-device.js, jumphp-http.js, jumphp-pwa.js, jumphp-gamepad.js, sw.js)
   stubs/sdl.stub.php    signatures of every SDL function / constant / class (read it to know the raw API)
   stubs/async.stub.php  the TrueAsync API used by JumPHP\Async
+  stubs/opengl.stub.php, openal.stub.php  every gl* / openal_* function and constant (tools/gl-stubs.php)
   tests/                engine unit tests
 skeleton/               template of a game, copied by `bin/jumphp new`
 games/<id>/             the games (games/pong = the reference game: read it)
 docker/                 engine-wasm (WebAssembly build), desktop (runtime), desktop-async (PHP 8.6 ZTS + TrueAsync),
-                        relay (network server), web (FrankenPHP)
+                        relay (network server), web (FrankenPHP), ext (php-opengl.patch, jumphp-xvfb: shared by them)
 tools/                  build scripts used by bin/jumphp
 build/engine/           the compiled WebAssembly engine (bin/jumphp engine:build), shared by all games
 ```
@@ -141,6 +143,7 @@ the player's files are never touched; `JUMPHP_VAR=<dir>` forces a folder). They 
 | `JUMPHP_MAX_FRAMES=600` | how many frames (60 frames = 1 s of game time, fixed step) |
 | `JUMPHP_SHOT_EVERY=30` | `shot`: also save one PNG every N frames (`shot-00030.png`...; older ones are deleted first) |
 | `JUMPHP_REALTIME=1` | headless frames in real time (network tests between two processes) |
+| `JUMPHP_GL=0` / `1` | headless OpenGL off / on (default: on when the game's code calls `gl()` / `opengl()`: real window on Xvfb, Mesa) |
 | `JUMPHP_DEBUG=1` | FPS / scene overlay (F3 toggles it too) |
 
 Three key-name formats, do not mix them:
@@ -616,18 +619,41 @@ your pause menu automatically; the sound is muted while hidden.
 `share($text, $url)`, `enableMotion()` then `tilt()` ([x, y] -1..1) / `motion()` (m/s²), `battery()`,
 `isMobile()`, `isStandalone()`.
 
-**WebGL** (`$this->engine->gl()`, browser; `isAvailable()` false on desktop: draw a 2D fallback, `Mat4::project()`
-does software 3D): a canvas over the game composes the SDL picture with a 3D layer and an optional
-post-processing shader. `setLayer('below'|'above', 'view'|'native', $keyColour)` (below: the 3D shows where the
-2D is the key colour, e.g. clear with `[255, 0, 255]` and draw the HUD), resources once in `enter()`:
-`program($vsGlsl, $fsGlsl)`, `buffer($floats)`, `indexBuffer($ints)`, `texture('assets/x.png')`,
-`textureFromRgba($w, $h, $bytes)`; each frame in `render()`: `clear($colour)`,
-`draw($program, ['attributes' => ['a_pos' => [$buffer, 3, $stride, $offset]], 'uniforms' => ['u_mvp' => Mat4::...],
-'textures' => ['u_tex' => $id], 'cull' => 'back'])`. `setPostShader('void main() { gl_FragColor =
-texture2D(u_frame, v_uv); }')` (inputs: `u_frame`, `v_uv`, `u_time`, `u_resolution`, `u_viewport`, `u_view`),
-`setUniform()`, `disable()` in `exit()`. GLSL ES 1.00 (WebGL 1); colours 0..255 like everywhere, GLSL uniforms
-0..1. Compile errors: `on('error')` + console. See `games/hello-webgl`, and `games/jumpball` (a whole 3D game:
-the track in chunk buffers rebuilt with `updateBuffer()`, lit meshes, a shader sky, software 3D on desktop).
+**OpenGL / WebGL** — the PHP-OpenGL extension ([Ponup/php-opengl](https://github.com/Ponup/php-opengl) +
+`docker/ext/php-opengl.patch`) runs in SDL's own GL context: OpenGL on the desktop (GPU driver or Mesa), WebGL 1 in
+the browser (the same `gl*` calls compiled by emscripten). Write **GLSL ES 1.00** (`attribute` / `varying` /
+`gl_FragColor`, `precision mediump float;` in fragment shaders; `#version 100` is added): both targets accept it.
+`isAvailable()` is false without a GL context (headless runs with the SDL dummy driver): draw a 2D fallback
+(`Mat4::project()` does software 3D). Keep trigonometry arguments small in mediump (`sin(3.14159 * fract(x))`, not
+`sin(x * 500.0)`: NaN on some GPUs).
+
+- High level, `$this->engine->gl()` (`WebGl`): a 3D layer under / over the 2D and post-processing of the whole
+  picture. `setLayer('below'|'above', 'view'|'native', $keyColour)` (below: the 3D shows where the 2D is the key
+  colour, e.g. clear with `[255, 0, 255]` and draw the HUD), resources once in `enter()`: `program($vsGlsl, $fsGlsl)`,
+  `buffer($floats)`, `updateBuffer()`, `indexBuffer($ints)`, `texture('assets/x.png')`, `textureFromRgba($w, $h, $bytes)`;
+  each frame in `render()`: `clear($colour)`, `draw($program, ['attributes' => ['a_pos' => [$buffer, 3, $stride,
+  $offset]], 'uniforms' => ['u_mvp' => Mat4::...], 'textures' => ['u_tex' => $id], 'cull' => 'back'])`.
+  `setPostShader('void main() { gl_FragColor = texture2D(u_frame, v_uv); }')` (inputs: `u_frame`, `v_uv`, `u_time`,
+  `u_resolution`, `u_viewport`, `u_view`), `setUniform()`, `disable()` in `exit()`.
+- Low level, `$this->engine->opengl()` (`OpenGl`): raw `gl*` calls between `begin($clearColour)` and `end()` in
+  `render()` (a 3D target of the view size with depth; `end()` puts it into the 2D being drawn, alpha blended:
+  draw the HUD after it). SDL's GL state is saved / restored around it: **never call gl* outside begin() / end()**
+  (or the resource helpers `program()`, `buffer()`, `texture()`, `renderTarget()`, which do it themselves).
+  `setSupersample(2)`: smoother edges. All functions and constants: `engine/stubs/opengl.stub.php`
+  (+ the patch: framebuffers, `glGetIntegerv`, uniforms 2f/4f/fv/Matrix3fv, `glBufferSubData`, binary strings
+  for buffers / pixels: `pack('g*', ...)`).
+- Colours 0..255 in the PHP API, 0..1 in GLSL. Compile errors: `on('error')` + stderr / console `[opengl]`.
+- See `games/hello-webgl` (layer + post shaders, and `RawGlScene`: raw gl* + Audio3d) and `games/jumpball` (a
+  whole 3D game: the track in chunk buffers rebuilt with `updateBuffer()`, lit meshes, a shader sky).
+- Headless: `bin/jumphp test` / `shot` run games that call `gl()` / `opengl()` on Xvfb (Mesa llvmpipe): the shots
+  show the real 3D. `JUMPHP_GL=0` forces the no-GL path (the fallback), `JUMPHP_GL=1` forces GL.
+
+**Positional sound** (`$this->engine->audio3d()`, `Audio3d`: [Ponup/php-openal](https://github.com/Ponup/php-openal);
+desktop OpenAL Soft, browser Web Audio): `load('engine', 'assets/sfx/engine.wav')` or `synth('beep', Synth::tone(...))`
+(mono or stereo WAV, mixed to mono: only mono is placed in space), each frame `listener($position, $forward, $up)`,
+`$voice = play('beep', [$x, $y, $z], $gain, $pitch, loop: true)`, `move($voice, $position, $velocity)`, `setGain()`,
+`setPitch()`, `isPlaying()`, `stop()`, `setDistance($reference, $rolloff, $max)`. Volume / mute follow SoundManager.
+Music and plain sound effects stay in SoundManager. Raw `openal_*` functions: `engine/stubs/openal.stub.php`.
 
 **PWA** (`$this->engine->pwa()`, game.yaml `pwa: true`): the build adds manifest, icons (from
 `assets/icon.png`, else the title's initial) and a service worker caching the whole build: installable, plays
@@ -671,7 +697,9 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 | Browser: "The game did not start" | open the console (webshot prints it): PHP boot error with file and line |
 | `bin/jumphp install` fails fetching `php-wasm-network` | the first install clones it from GitHub (network needed once); later installs use the composer cache |
 | Composer package needs an extension | not possible in the browser: pure PHP only |
-| WebGL: nothing in 3D, console `[webgl] ...` | a shader error (also `$gl->on('error')`); draw every frame in `render()`; `setLayer()` and the key colour cleared in the 2D |
+| OpenGL / WebGL: nothing in 3D, stderr / console `[opengl] ...` | a shader error (also `$gl->on('error')`): GLSL ES 1.00, `precision mediump float;` in the fragment shader; draw every frame in `render()`; `setLayer()` and the key colour cleared in the 2D |
+| Raw gl* calls break the 2D (wrong textures, black screen) | gl* only between `opengl()->begin()` and `end()` (or inside `program()` / `buffer()`...): SDL's GL state is saved / restored there |
+| A post shader is black in parts on some GPUs | mediump: big arguments to sin / cos lose all precision; `sin(3.14159 * fract(x))` |
 | `HttpError ... network error or CORS` in the browser only | the server must send `Access-Control-Allow-Origin` (fetch from a web page) |
 | PWA not installable / not offline | game.yaml `pwa`, https (or localhost), rebuild; the first visit fills the cache (`isOfflineReady()`) |
 | `Class "App\..." not found` inside a thread | the thread only has the autoloader: use `JumPHP\Async` (it loads `vendor/autoload.php` there), not raw `Async\spawn_thread` without a bootloader |
@@ -683,10 +711,10 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
-- `games/hello-webgl/` — WebGL: 3D cubes under a 2D HUD, post-processing shaders, software 3D on desktop,
+- `games/hello-webgl/` — WebGL / OpenGL: 3D cubes under a 2D HUD, post-processing shaders, raw gl* + OpenAL (`RawGlScene`),
   gamepad sticks / rumble, automatic pause (lifecycle), PWA (installable, offline).
-- `games/jumpball/` — a 3D runner on WebGL: procedural track (seeded), ball physics at a fixed step, a bot
-  (title screen demo + smoke test), chunked vertex buffers, filled software 3D on desktop, best score saved.
+- `games/jumpball/` — a 3D runner on OpenGL / WebGL: procedural track (seeded), ball physics at a fixed step, a bot
+  (title screen demo + smoke test), chunked vertex buffers, filled software 3D without GL, best score saved.
 - `skeleton/` — platformer: tiles, slopes, one-way platforms, camera, coins, sprite from pixel strings.
 - `engine/stubs/sdl.stub.php` — every raw SDL / SDL_image / SDL_mixer / SDL_ttf function and constant.
 - `engine/tests/` — usage examples of CollisionSystem, TiledJsonLoader, SceneManager, Menu, Net.

@@ -10,6 +10,8 @@ use JumPHP\Debug\FpsCounter;
 use JumPHP\Device\Device;
 use JumPHP\Device\Lifecycle;
 use JumPHP\Device\Pwa;
+use JumPHP\Audio\Audio3d;
+use JumPHP\Gl\OpenGl;
 use JumPHP\Gl\WebGl;
 use JumPHP\Http\Http;
 use JumPHP\Input\ActionMap;
@@ -30,8 +32,8 @@ use JumPHP\Util\Time;
  *   input -> network -> sound -> scenes update -> scenes render -> present.
  *
  * Everything a scene needs is a public property: $engine->actions, ->scenes, ->sound, ->sdl, ->options,
- * ->storage, ->config, ->input, ->lang, ->bridge, plus font(), net(), tasks(), http(), gl(), device(),
- * lifecycle() and pwa().
+ * ->storage, ->config, ->input, ->lang, ->bridge, plus font(), net(), tasks(), http(), gl(), opengl(), audio3d(),
+ * device(), lifecycle() and pwa().
  *
  * Events: 'boot', 'frame' (float $dt) after each update, 'quit'.
  */
@@ -49,6 +51,8 @@ class Engine extends EventEmitter
     private ?Tasks $tasks = null;
     private ?Http $http = null;
     private ?WebGl $gl = null;
+    private ?OpenGl $opengl = null;
+    private ?Audio3d $audio3d = null;
     private ?Device $device = null;
     private ?Lifecycle $lifecycle = null;
     private ?Pwa $pwa = null;
@@ -165,6 +169,7 @@ class Engine extends EventEmitter
             $this->net->poll();
         }
         $this->sound->update();
+        $this->audio3d?->sync();
         $this->tasks?->poll();
         $this->http?->poll();
         $this->scenes->update($dt);
@@ -180,7 +185,6 @@ class Engine extends EventEmitter
             $this->drawDebug();
         }
         $renderer->endFrame();
-        $this->gl?->flush($renderer, $this->time);
         $this->frame++;
     }
 
@@ -255,9 +259,28 @@ class Engine extends EventEmitter
     }
 
     /** WebGL in the browser: shaders, 3D layer, post-processing (does nothing on desktop: isAvailable()). */
+    /** A 3D layer + post-processing shaders over the 2D (OpenGL / WebGL, both targets). */
     public function gl(): WebGl
     {
-        return $this->gl ??= new WebGl($this->bridge);
+        return $this->gl ??= new WebGl($this->opengl(), fn (): float => $this->time);
+    }
+
+    /** Positional sound (PHP-OpenAL): sounds placed in the 3D world, heard from a listener. */
+    public function audio3d(): Audio3d
+    {
+        return $this->audio3d ??= new Audio3d($this->sound);
+    }
+
+    /** @internal Application: the OpenAL device, at the end */
+    public function closeAudio3d(): void
+    {
+        $this->audio3d?->close();
+    }
+
+    /** Raw OpenGL (PHP-OpenGL) in SDL's context: begin() / end(), programs, buffers, textures. */
+    public function opengl(): OpenGl
+    {
+        return $this->opengl ??= new OpenGl($this->sdl);
     }
 
     /** Phone features: vibration, screen awake, orientation, clipboard, tilt, battery... */

@@ -72,8 +72,11 @@ final class Application
             });
         }
         if (Platform::isHeadless()) {
-            putenv('SDL_VIDEODRIVER=dummy');
+            if (!Platform::setting('JUMPHP_HEADLESS_GL')) {
+                putenv('SDL_VIDEODRIVER=dummy');     // JUMPHP_HEADLESS_GL: a real window on Xvfb, with OpenGL
+            }
             putenv('SDL_AUDIODRIVER=dummy');
+            putenv('ALSOFT_DRIVERS=null');           // OpenAL (Audio3d): silent output, still a working device
         }
 
         $config = GameConfig::load($root);
@@ -138,6 +141,7 @@ final class Application
     {
         $this->engine->gameLoop->start();
         if ($this->crash === null) {
+            $this->engine->closeAudio3d();
             $this->engine->sound->close();
             $this->engine->sdl->quit();
         }

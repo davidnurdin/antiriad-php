@@ -59,7 +59,8 @@ final class World
         $shake = $run->state === 'crash' ? sin($run->time * 70) * 0.12 * max(0.0, 1 - $run->endTime * 2) : 0.0;
         $eye = [$run->x * 0.6 + $shake, $run->camY + 2.1, $run->z - 4.0];
         $target = [$run->x * 0.8, $run->camY + 0.1, $run->z + 6.0];
-        return Mat4::multiply(Mat4::perspective(62, $aspect, 0.1, 80), Mat4::lookAt($eye, $target));
+        // looking towards +z puts world +x on the left of the screen: mirror x so that right is right
+        return Mat4::multiply(Mat4::perspective(62, $aspect, 0.1, 80), Mat4::scale(-1, 1, 1), Mat4::lookAt($eye, $target));
     }
 
     public function render(Engine $engine, Renderer $r, Run $run): void

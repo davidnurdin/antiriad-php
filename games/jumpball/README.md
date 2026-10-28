@@ -19,4 +19,4 @@ bin/jumphp test jumpball                                         # le bot joue 6
 ```
 
 Commandes : flèches, A/D ou stick pour se diriger. Espace, Haut ou A pour sauter (maintenir pour ressauter dès
-l'atterrissage). Échap ou Start pour la pause. Sur téléphone, les flèches et le bouton JUMP s'affichent à l'écran.
+l'atterrissage). Échap ou Start pour la pause. Sur téléphone : un joystick rond sur la moitié gauche de l'écran, et le bouton JUMP.

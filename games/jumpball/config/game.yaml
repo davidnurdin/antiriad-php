@@ -15,7 +15,7 @@ game:
   pause_scene: App\Scene\PauseScene
   pwa: { short_name: JUMPBALL, theme_color: '#08061e' }
   controls: "Arrows / A D / stick: steer. Space / Up / A: jump (hold to jump again). Escape / Start: pause."
-  touch: { a: Space, b: Escape, start: Escape, labels: { a: JUMP } }
+  touch: { pad: stick, a: Space, b: Escape, start: Escape, labels: { a: JUMP } }   # a floating joystick on the left half
   # what `bin/jumphp test` runs headless: the bot plays (and restarts when it falls)
   smoke:
     scene: App\Scene\PlayScene

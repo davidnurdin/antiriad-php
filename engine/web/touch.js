@@ -64,6 +64,8 @@
 		base.appendChild(knob);
 		document.body.appendChild(zone);
 		document.body.appendChild(base);
+		zone.restX = 90;
+		zone.base = base;
 		let id = null, cx = 0, cy = 0, t0 = 0, moved = false, dirs = {};
 		const setDirs = (next) => {
 			for (const d of ['Left', 'Right', 'Up', 'Down']) {
@@ -92,7 +94,7 @@
 			e.preventDefault();
 			id = null;
 			knob.style.transform = '';
-			base.style.left = '90px';
+			base.style.left = zone.restX + 'px';
 			base.style.top = 'calc(100% - 110px)';
 			setDirs({});
 			// a short tap without sliding is not for the joystick: a click on the game under it (menus, buttons)
@@ -113,6 +115,7 @@
 		zone.addEventListener('pointermove', (e) => { if (e.pointerId === id) { e.preventDefault(); move(e.clientX, e.clientY); } });
 		zone.addEventListener('pointerup', end);
 		zone.addEventListener('pointercancel', end);
+		return zone;
 	}
 
 	// "turn your phone" over the game while the phone is upright (when the orientation lock is not possible)
@@ -165,8 +168,9 @@
 		const labels = Object.assign({ a: 'A', b: 'B', start: 'START', select: 'SELECT' }, cfg.labels || {});
 		const game = window.JUMPHP_GAME || {};
 		if ((game.width || 16) > (game.height || 9)) rotateHint(labels.rotate || 'TURN YOUR PHONE');
+		let zone = null;
 		if (cfg.pad === 'stick') {
-			stick();
+			zone = stick();
 		} else {
 			const s = 'width:56px;height:56px;border-radius:12px;';
 			button('◀', 'Left', s + 'left:16px;bottom:78px;');
@@ -176,31 +180,66 @@
 		}
 		const r = 'width:68px;height:68px;border-radius:50%;';
 		const small = labels.a.length > 2 || labels.b.length > 2 ? 'font-size:12px;' : '';
-		button(labels.a, cfg.a, r + small + 'right:20px;bottom:40px;');
-		button(labels.b, cfg.b, r + small + 'right:104px;bottom:24px;');
+		const a = button(labels.a, cfg.a, r + small);
+		const b = button(labels.b, cfg.b, r + small);
 		const pill = 'padding:6px 12px;border-radius:8px;font-size:12px;';
 		const pills = [];
 		if (cfg.select) pills.push(button(labels.select, cfg.select, pill));
 		pills.push(button(labels.start, cfg.start, pill));
-		// bottom centre; on narrow (portrait) screens the bottom is full: top left
+		const canvas = document.getElementById('canvas');
+		// the SOUND / FULLSCREEN toolbar would sit under the A / B buttons: at the top
+		const toolbar = document.getElementById('toolbar');
+		const set = (el, css) => Object.assign(el.style, { left: 'auto', right: 'auto', top: 'auto', bottom: 'auto', transform: 'none' }, css);
 		const place = () => {
+			// the black bands beside the game (landscape phones): the buttons go there, never over the picture
+			const c = canvas ? canvas.getBoundingClientRect() : null;
+			const band = c ? Math.min(c.left, innerWidth - c.right) : 0;
+			if (band >= 72) {
+				const w = Math.round(band);
+				set(a, { right: (w - 68) / 2 + 'px', bottom: '28px' });
+				set(b, { right: (w - 68) / 2 + 'px', bottom: '112px' });
+				let y = 8;
+				if (toolbar) {
+					// in the left band, one button per row
+					set(toolbar, { left: '8px', top: '8px', width: (w - 16) + 'px', flexDirection: 'column' });
+				}
+				pills.forEach((p) => {
+					set(p, { right: '0px', top: y + 'px', width: (w - 32) + 'px', margin: '0 8px', textAlign: 'center' });
+					y += p.offsetHeight + 8;
+				});
+				if (zone) {
+					zone.style.width = w + 'px';
+					zone.restX = w / 2;
+					zone.base.style.left = zone.restX + 'px';
+				}
+				return;
+			}
+			pills.forEach((p) => Object.assign(p.style, { width: '', margin: '' }));
+			if (toolbar) set(toolbar, { right: '8px', top: '8px', width: '', flexDirection: '' });
+			if (zone) {
+				zone.style.width = '45%';
+				zone.restX = 90;
+				zone.base.style.left = '90px';
+			}
+			set(a, { right: '20px', bottom: '40px' });
+			set(b, { right: '104px', bottom: '24px' });
+			// bottom centre; on narrow (portrait) screens the bottom is full: top left
 			const narrow = innerWidth < 600;
 			let x = 8;
-			pills.forEach((b, i) => {
+			pills.forEach((p, i) => {
 				if (narrow) {
-					Object.assign(b.style, { top: '8px', bottom: 'auto', left: x + 'px', transform: 'none' });
-					x += b.offsetWidth + 8;
+					set(p, { top: '8px', left: x + 'px' });
+					x += p.offsetWidth + 8;
 				} else {
 					const shift = pills.length === 1 ? '-50%' : (i === 0 ? '-110%' : '10%');
-					Object.assign(b.style, { top: 'auto', bottom: '12px', left: '50%', transform: `translateX(${shift})` });
+					set(p, { bottom: '12px', left: '50%', transform: `translateX(${shift})` });
 				}
 			});
 		};
 		place();
 		addEventListener('resize', place);
-		// the SOUND / FULLSCREEN toolbar would sit under the A / B buttons: move it to the top
-		const toolbar = document.getElementById('toolbar');
-		if (toolbar) { toolbar.style.bottom = 'auto'; toolbar.style.top = '8px'; }
+		document.addEventListener('fullscreenchange', () => setTimeout(place, 100));
+		if (window.ResizeObserver && canvas) new ResizeObserver(place).observe(canvas);
 	}
 
 	window.JumPHPTouch = { start, key };

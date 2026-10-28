@@ -626,7 +626,8 @@ post-processing shader. `setLayer('below'|'above', 'view'|'native', $keyColour)`
 'textures' => ['u_tex' => $id], 'cull' => 'back'])`. `setPostShader('void main() { gl_FragColor =
 texture2D(u_frame, v_uv); }')` (inputs: `u_frame`, `v_uv`, `u_time`, `u_resolution`, `u_viewport`, `u_view`),
 `setUniform()`, `disable()` in `exit()`. GLSL ES 1.00 (WebGL 1); colours 0..255 like everywhere, GLSL uniforms
-0..1. Compile errors: `on('error')` + console. See `games/hello-webgl`.
+0..1. Compile errors: `on('error')` + console. See `games/hello-webgl`, and `games/jumpball` (a whole 3D game:
+the track in chunk buffers rebuilt with `updateBuffer()`, lit meshes, a shader sky, software 3D on desktop).
 
 **PWA** (`$this->engine->pwa()`, game.yaml `pwa: true`): the build adds manifest, icons (from
 `assets/icon.png`, else the title's initial) and a service worker caching the whole build: installable, plays
@@ -684,6 +685,8 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
 - `games/hello-webgl/` — WebGL: 3D cubes under a 2D HUD, post-processing shaders, software 3D on desktop,
   gamepad sticks / rumble, automatic pause (lifecycle), PWA (installable, offline).
+- `games/jumpball/` — a 3D runner on WebGL: procedural track (seeded), ball physics at a fixed step, a bot
+  (title screen demo + smoke test), chunked vertex buffers, filled software 3D on desktop, best score saved.
 - `skeleton/` — platformer: tiles, slopes, one-way platforms, camera, coins, sprite from pixel strings.
 - `engine/stubs/sdl.stub.php` — every raw SDL / SDL_image / SDL_mixer / SDL_ttf function and constant.
 - `engine/tests/` — usage examples of CollisionSystem, TiledJsonLoader, SceneManager, Menu, Net.

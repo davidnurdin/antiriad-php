@@ -16,7 +16,7 @@ pour jouer sur le bureau). Jamais de PHP, d'emscripten ou de node à installer.
 
 ### Démarrage rapide
 
-Démo en ligne : **https://davidnurdin.github.io/jumPhp/** (hello-threads, Pong, casse-briques).
+Démo en ligne : **https://davidnurdin.github.io/jumPhp/** (JUMPBALL en 3D WebGL, hello-webgl, hello-threads, Pong, casse-briques).
 
 ```bash
 git clone https://github.com/davidnurdin/jumPhp.git && cd jumPhp
@@ -138,7 +138,7 @@ the desktop). Never install PHP, emscripten or node.
 
 ### Quick start
 
-Live demo: **https://davidnurdin.github.io/jumPhp/** (hello-threads, Pong, Breakout).
+Live demo: **https://davidnurdin.github.io/jumPhp/** (JUMPBALL in 3D WebGL, hello-webgl, hello-threads, Pong, Breakout).
 
 ```bash
 git clone https://github.com/davidnurdin/jumPhp.git && cd jumPhp

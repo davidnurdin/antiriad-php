@@ -1,7 +1,7 @@
 # WebGL, mobile, cycle de vie, HTTP, PWA, manettes
 
 Ces API marchent sur les deux cibles. Ce qui n'existe pas sur une cible ne fait rien et ne lève pas d'erreur
-(`false` / `null`). L'exemple complet est `games/hello-webgl`.
+(`false` / `null`). L'exemple complet est `games/hello-webgl` ; `games/jumpball` est un vrai jeu en 3D (WebGL).
 
 ## Le pont page ⇄ PHP
 
@@ -63,7 +63,8 @@ $gl->draw($this->prog, [
 - Une erreur de compilation déclenche l'événement `$gl->on('error', fn (string $m) => ...)` et s'affiche dans la console `[webgl]`.
 - `disable()` dans `exit()` : retour à l'affichage SDL seul.
 - **Desktop** : pas de WebGL (le binding SDL n'a pas d'OpenGL), `isAvailable()` vaut false. `Mat4` sert aussi à
-  la 3D logicielle (`Mat4::project()` + `drawLine`) : c'est le repli de `hello-webgl`.
+  la 3D logicielle (`Mat4::project()` + `drawLine`) : c'est le repli de `hello-webgl`. `jumpball` remplit ses
+  faces ligne par ligne dans l'ordre du peintre (`App\Gfx\SoftwareView`).
 
 ## Cycle de vie — `$this->engine->lifecycle()`
 

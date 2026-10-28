@@ -50,8 +50,9 @@ engine/                 the framework: composer package jumphp/engine, namespace
 skeleton/               template of a game, copied by `bin/jumphp new`
 games/<id>/             the games (games/pong = the reference game: read it)
 docker/                 engine-wasm (WebAssembly build), desktop (runtime), desktop-async (PHP 8.6 ZTS + TrueAsync),
-                        relay (network server), web (FrankenPHP), ext (php-opengl.patch, jumphp-xvfb: shared by them)
-tools/                  build scripts used by bin/jumphp
+                        relay (network server), web (FrankenPHP), ext (php-opengl.patch, jumphp-xvfb: shared by them),
+                        server (bin/jumphp deploy: FrankenPHP alone / Traefik + FrankenPHP / existing Traefik)
+tools/                  build scripts used by bin/jumphp; init.sh (the wizard), post-create.sh (composer create-project)
 build/engine/           the compiled WebAssembly engine (bin/jumphp engine:build), shared by all games
 ```
 
@@ -71,6 +72,7 @@ games/<id>/
   var/                  player files (saves, options) — never commit, never read at build time
   dist/web/             browser build output (bin/jumphp build)
   AGENTS.md             notes about this game
+  BRIEF.md              (projects made by bin/jumphp init) what the game should be: the prompt the user wrote
 ```
 
 ---
@@ -114,7 +116,9 @@ games/<id>/
 | Command | What it does |
 |---|---|
 | `bin/jumphp setup [async]` | builds the Docker images (desktop runtime, relay; `async`: also the PHP 8.6 ZTS + TrueAsync runtime, ~15 min). Done automatically when missing. |
-| `bin/jumphp engine:build` | builds the WebAssembly engine into `build/engine/` (~25 min the first time, cached). Needed once for browser builds. |
+| `bin/jumphp init` | interactive project wizard for humans (tools, game, engine, server, GitHub, Claude Code); `bin/jumphp` alone runs it while `.env` has no `JUMPHP_GAME`. Agents: do not run it (it asks questions) |
+| `bin/jumphp engine:download` | downloads the prebuilt WebAssembly engine of this version (GitHub release) into `build/engine/` |
+| `bin/jumphp engine:build` | builds the WebAssembly engine into `build/engine/` (~25 min the first time, cached). Needed once for browser builds (or `engine:download`). |
 | `bin/jumphp new <id> ["Title"]` | creates `games/<id>` from `skeleton/` (id: `a-z0-9-`) |
 | `bin/jumphp install <id>` | composer install of the game |
 | `bin/jumphp composer <id> require vendor/pkg` | composer (pure-PHP packages only: no extension exists in the browser) |
@@ -126,7 +130,8 @@ games/<id>/
 | `bin/jumphp webshot <id> [seconds] [keys]` | headless Chrome: loads the browser build, presses keys, screenshot `dist/webshot.png`, fails on JS / PHP errors |
 | `bin/jumphp relay up\|down\|logs` | multiplayer relay server on `ws://localhost:8090/ws` |
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
-| `bin/jumphp deploy <id>` | rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/` (.env) |
+| `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
+| `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
 | `bin/jumphp pages [id...]` | builds the games (default: all) + a home page from their `game.json`, force-pushes them as the `gh-pages` branch of the git remote (GitHub Pages: `https://<owner>.github.io/<repo>/`). Publishing: only when asked |
 | `bin/jumphp test engine` | engine unit tests + phpstan |
 | `bin/jumphp lint` | php -l everywhere + forbidden words |

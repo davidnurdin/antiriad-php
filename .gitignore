@@ -2,6 +2,9 @@
 /.build/
 /.cache/
 /.env
+# composer create-project leaves these at the root (the root package has no dependency)
+/vendor/
+/composer.lock
 /engine/vendor/
 /engine/composer.lock
 /engine/.phpunit.cache/

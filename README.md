@@ -14,6 +14,27 @@ Tiles et collisions au pixel (pentes, plateformes, cartes Tiled), entités et an
 ligne. **Tout passe par Docker** : la machine n'a besoin que de Docker (plus d'un écran et d'un serveur son
 pour jouer sur le bureau). Jamais de PHP, d'emscripten ou de node à installer.
 
+### Nouveau projet
+
+```bash
+composer create-project jumphp/jumphp mon-jeu
+```
+
+Le projet est une copie de JumPHP reliée au dépôt par git (remote `jumphp` : `bin/jumphp update` récupère
+les nouvelles versions). Un assistant démarre aussitôt (ou plus tard : `cd mon-jeu && bin/jumphp`). Chaque
+étape demande avant d'agir :
+
+1. les outils : git, curl, Docker (installés avec le gestionnaire de paquets du système s'ils manquent) ;
+2. ton jeu : nom, identifiant, description, résolution, langue → `games/<id>` ;
+3. le moteur navigateur (téléchargé déjà compilé, ou compilé sur place) et un premier test ;
+4. le déploiement sur ton serveur : FrankenPHP seul, Traefik + FrankenPHP, ou derrière un Traefik existant ;
+5. le dépôt GitHub (et GitHub Pages) ;
+6. **Claude Code**, lancé avec un prompt prêt : tu écris seulement ce que doit faire ton jeu.
+
+Sans PHP sur la machine : `docker run --rm -it -v "$PWD":/app -w /app composer create-project jumphp/jumphp mon-jeu`,
+puis `cd mon-jeu && bin/jumphp`. Ou simplement `git clone https://github.com/davidnurdin/jumPhp.git mon-jeu`.
+Détails : [docs/projet.md](docs/projet.md).
+
 ### Démarrage rapide
 
 Démo en ligne : **https://davidnurdin.github.io/jumPhp/** (JUMPBALL en 3D WebGL, hello-webgl, hello-threads, Pong, casse-briques).
@@ -73,8 +94,10 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 
 | Commande | Rôle |
 |---|---|
+| `init` (ou `bin/jumphp` seul) | assistant : outils, jeu, moteur, serveur, GitHub, Claude Code |
 | `setup [async]` | construit les images Docker (`async` : aussi le runtime PHP 8.6 ZTS + TrueAsync) |
-| `engine:build` | construit le moteur WebAssembly dans `build/engine/` |
+| `engine:download` / `engine:build` | moteur WebAssembly dans `build/engine/` : téléchargé (release GitHub) / compilé (~25 min) |
+| `update` | fusionne la dernière version de JumPHP dans le projet |
 | `new <jeu> ["Titre"]` | nouveau jeu depuis le squelette |
 | `install <jeu>` / `composer <jeu> ...` | dépendances composer (paquets PHP purs uniquement) |
 | `run <jeu>` | jouer sur le bureau (X11 ou Wayland, PulseAudio / PipeWire, GPU si disponible) |
@@ -85,7 +108,9 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 | `webshot <jeu>` | teste la version navigateur dans un Chrome sans écran |
 | `relay up\|down\|logs` | serveur multijoueur sur `ws://localhost:8090/ws` |
 | `export:desktop <jeu>` | une image Docker qui lance le jeu |
-| `deploy <jeu>` | rsync de `dist/web` vers `JUMPHP_DEPLOY_TARGET` (`.env`, voir `.env.dist`) |
+| `deploy:setup` / `deploy [jeux...]` | configure / déploie sur ton serveur (FrankenPHP seul ou avec Traefik, HTTPS Let's Encrypt) ; sans serveur : rsync vers `JUMPHP_DEPLOY_TARGET` |
+| `server:setup` / `server:logs` | installe Docker sur le serveur / journaux du serveur web |
+| `github` | met le projet sur GitHub (`gh`), et en option sur GitHub Pages |
 | `pages [jeux...]` | construit les jeux (tous par défaut) et les publie avec une page d'accueil sur GitHub Pages (branche `gh-pages`, remplacée à chaque fois) |
 | `lint` / `doctor` | contrôle de tout le dépôt / diagnostic de la machine |
 
@@ -117,6 +142,7 @@ seulement dans `var/`.
 
 - [AGENTS.md](AGENTS.md) : le guide complet (anglais), pour les humains comme pour les IA
 - [docs/architecture.md](docs/architecture.md) : organisation du moteur, cycle d'une frame
+- [docs/projet.md](docs/projet.md) : nouveau projet (composer), l'assistant, déploiement sur un serveur, GitHub, mises à jour
 - [docs/build.md](docs/build.md) : Docker, compilation du moteur, build navigateur, déploiement
 - [docs/navigateur.md](docs/navigateur.md) : les pièges du WebAssembly
 - [docs/tiles-collisions.md](docs/tiles-collisions.md) : cartes Tiled, masques, pentes, plateformes
@@ -137,6 +163,23 @@ Pixel-precise tiles and collisions (slopes, platforms, Tiled maps), entities and
 (files or generated sounds), menus, saves, translations, keyboard / gamepad / touch, online multiplayer.
 **Everything runs in Docker**: the machine only needs Docker (plus a display and a sound server to play on
 the desktop). Never install PHP, emscripten or node.
+
+### New project
+
+```bash
+composer create-project jumphp/jumphp my-game
+```
+
+The project is a copy of JumPHP linked to its repository with git (remote `jumphp`: `bin/jumphp update`
+brings new versions). A wizard starts right away (or later: `cd my-game && bin/jumphp`); each step asks
+before acting: tools (git, curl, Docker: installed with the system's package manager when missing), your
+game (name, id, description, resolution, language → `games/<id>`), the browser engine (prebuilt download
+or local build) and a first test, deployment to your server (FrankenPHP alone, Traefik + FrankenPHP, or
+behind an existing Traefik), the GitHub repository (and GitHub Pages), then **Claude Code** started with a
+ready-made prompt: you only write what your game should do.
+
+Without PHP on the machine: `docker run --rm -it -v "$PWD":/app -w /app composer create-project jumphp/jumphp my-game`,
+then `cd my-game && bin/jumphp`. Or just `git clone https://github.com/davidnurdin/jumPhp.git my-game`.
 
 ### Quick start
 
@@ -197,8 +240,10 @@ breaker was written that way, by an AI that had only read this file.
 
 | Command | What it does |
 |---|---|
+| `init` (or `bin/jumphp` alone) | wizard: tools, game, engine, server, GitHub, Claude Code |
 | `setup [async]` | builds the Docker images (`async`: also the PHP 8.6 ZTS + TrueAsync runtime) |
-| `engine:build` | builds the WebAssembly engine into `build/engine/` |
+| `engine:download` / `engine:build` | the WebAssembly engine in `build/engine/`: downloaded (GitHub release) / built (~25 min) |
+| `update` | merges the newest JumPHP into the project |
 | `new <game> ["Title"]` | new game from the skeleton |
 | `install <game>` / `composer <game> ...` | composer dependencies (pure-PHP packages only) |
 | `run <game>` | play on the desktop (X11 or Wayland, PulseAudio / PipeWire, GPU when available) |
@@ -209,7 +254,9 @@ breaker was written that way, by an AI that had only read this file.
 | `webshot <game>` | tests the browser build in headless Chrome |
 | `relay up\|down\|logs` | multiplayer server on `ws://localhost:8090/ws` |
 | `export:desktop <game>` | a Docker image that runs the game |
-| `deploy <game>` | rsync `dist/web` to `JUMPHP_DEPLOY_TARGET` (`.env`, see `.env.dist`) |
+| `deploy:setup` / `deploy [games...]` | sets up / deploys to your server (FrankenPHP alone or with Traefik, Let's Encrypt HTTPS); without a server: rsync to `JUMPHP_DEPLOY_TARGET` |
+| `server:setup` / `server:logs` | installs Docker on the server / web server logs |
+| `github` | puts the project on GitHub (`gh`), optionally on GitHub Pages |
 | `pages [games...]` | builds the games (default: all) and publishes them with a home page on GitHub Pages (`gh-pages` branch, replaced each time) |
 | `lint` / `doctor` | checks the whole repository / diagnoses the machine |
 

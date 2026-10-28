@@ -1,0 +1,22 @@
+{
+    "name": "jumphp/jumphp",
+    "description": "JumPHP: write retro 2D / 3D games in PHP that run on the desktop and in the browser (WebAssembly). New project: composer create-project jumphp/jumphp my-game",
+    "type": "project",
+    "license": "MIT",
+    "keywords": ["game", "gamedev", "engine", "sdl", "webassembly", "wasm", "webgl", "retro", "2d", "3d"],
+    "homepage": "https://github.com/davidnurdin/jumPhp",
+    "support": {
+        "issues": "https://github.com/davidnurdin/jumPhp/issues",
+        "source": "https://github.com/davidnurdin/jumPhp"
+    },
+    "require": {},
+    "scripts": {
+        "post-create-project-cmd": [
+            "Composer\\Config::disableProcessTimeout",
+            "bash tools/post-create.sh"
+        ]
+    },
+    "config": {
+        "process-timeout": 0
+    }
+}

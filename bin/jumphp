@@ -13,6 +13,9 @@ ASYNC_IMAGE="${JUMPHP_ASYNC_IMAGE:-jumphp/desktop-async:dev}"
 EMSDK_IMAGE="${JUMPHP_EMSDK_IMAGE:-emscripten/emsdk:3.1.35}"
 WEB_IMAGE="${JUMPHP_WEB_IMAGE:-dunglas/frankenphp:1.12.7-alpine}"
 PUPPETEER_IMAGE="${JUMPHP_PUPPETEER_IMAGE:-ghcr.io/puppeteer/puppeteer:24.10.0}"
+TRAEFIK_IMAGE="${JUMPHP_TRAEFIK_IMAGE:-traefik:v3.7}"
+# the JumPHP repository: prebuilt engines (GitHub releases), `bin/jumphp update`
+REPO_URL="${JUMPHP_REPO:-https://github.com/davidnurdin/jumPhp.git}"
 ENGINE_DIR="$ROOT/build/engine"
 BUILDER="${JUMPHP_BUILDER:-jumphp-builder}"
 TTY_FLAGS=$([ -t 0 ] && [ -t 1 ] && echo "-it" || echo "-i")
@@ -26,8 +29,13 @@ usage() {
 JumPHP - retro 2D games in PHP (SDL), desktop + browser. Everything runs in Docker.
 
 Setup
+  init                      interactive wizard: tools, your game, engine, server, GitHub, then Claude Code
+                            (also what `bin/jumphp` alone runs in a project without a game yet)
   setup [async]             build the Docker images (desktop runtime, relay server; async: PHP 8.6 ZTS + TrueAsync)
+  engine:download [version] download the prebuilt WebAssembly engine of this version (GitHub release)
   engine:build              build the WebAssembly engine (PHP + SDL -> build/engine, ~25 min once, cached)
+  engine:pack               build/engine -> .build/jumphp-engine.tar.gz (+ .sha256), the release asset
+  update                    merge the newest JumPHP (git remote "jumphp") into the project
   doctor                    check docker, display, sound
 
 Games (<game> = a folder of games/, e.g. pong)
@@ -42,7 +50,13 @@ Games (<game> = a folder of games/, e.g. pong)
   webshot <game> [seconds] [keys]  headless Chrome: load the browser build, play keys, screenshot, fail on errors
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
-  deploy <game>             rsync dist/web to $JUMPHP_DEPLOY_TARGET/<game>/ (.env)
+  deploy [game...]          to your server (JUMPHP_SERVER in .env, see deploy:setup): browser builds + FrankenPHP
+                            (alone or behind Traefik), docker compose up there. Default game: JUMPHP_GAME.
+                            Without JUMPHP_SERVER: rsync dist/web to $JUMPHP_DEPLOY_TARGET/<game>/
+  deploy:setup              ask the server, domain, web server (FrankenPHP / Traefik + FrankenPHP / existing Traefik)
+  server:setup              install Docker on the server (ssh)
+  server:logs               the server's web logs
+  github                    put the project on GitHub (gh), optionally GitHub Pages
   pages [game...]           build the games (default: all) + a home page, publish them on the gh-pages
                             branch of the git remote (GitHub Pages; the branch is replaced each time)
 
@@ -130,6 +144,50 @@ cmd_engine_build() {
   say "building the WebAssembly engine (first build ~25 min, then cached in .cache/buildx-engine)"
   docker buildx bake --builder "$BUILDER" -f docker/engine-wasm/docker-bake.hcl --progress=plain "$@"
   ls -la "$ENGINE_DIR"
+}
+
+# The prebuilt engine of a version (asset of the GitHub release vX.Y.Z), checked with its sha256.
+cmd_engine_download() {
+  local version="${1:-$(cat "$ROOT/VERSION" 2>/dev/null || echo latest)}"
+  local base="${REPO_URL%.git}/releases" url
+  if [ "$version" = latest ]; then url="$base/latest/download"; else url="$base/download/v${version#v}"; fi
+  command -v curl >/dev/null || die "curl is needed"
+  local tmp; tmp="$(mktemp -d)"
+  say "downloading the engine $version ($url/jumphp-engine.tar.gz)"
+  curl -fL --progress-bar -o "$tmp/jumphp-engine.tar.gz" "$url/jumphp-engine.tar.gz" \
+    && curl -fsSL -o "$tmp/jumphp-engine.tar.gz.sha256" "$url/jumphp-engine.tar.gz.sha256" \
+    || { rm -rf "$tmp"; die "no prebuilt engine for $version: bin/jumphp engine:build (~25 min)"; }
+  local want got
+  want="$(cut -d' ' -f1 < "$tmp/jumphp-engine.tar.gz.sha256")"
+  got="$( (sha256sum "$tmp/jumphp-engine.tar.gz" 2>/dev/null || shasum -a 256 "$tmp/jumphp-engine.tar.gz") | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$want" = "$got" ] || { rm -rf "$tmp"; die "checksum mismatch: the download is broken, try again"; }
+  mkdir -p "$ENGINE_DIR"
+  tar -xzf "$tmp/jumphp-engine.tar.gz" -C "$ENGINE_DIR"
+  rm -rf "$tmp"
+  ls -la "$ENGINE_DIR"
+}
+
+cmd_engine_pack() {
+  [ -f "$ENGINE_DIR/php-web.wasm" ] || die "no engine: bin/jumphp engine:build first"
+  mkdir -p "$ROOT/.build"
+  tar -czf "$ROOT/.build/jumphp-engine.tar.gz" -C "$ENGINE_DIR" .
+  (cd "$ROOT/.build" && { sha256sum jumphp-engine.tar.gz 2>/dev/null || shasum -a 256 jumphp-engine.tar.gz; } > jumphp-engine.tar.gz.sha256)
+  ls -la "$ROOT/.build/jumphp-engine.tar.gz"*
+}
+
+# The newest JumPHP merged into the project (a project made by composer create-project or bin/jumphp init
+# has the framework as git remote "jumphp"; a plain clone of JumPHP has it as origin).
+cmd_update() {
+  command -v git >/dev/null || die "git is needed"
+  local remote=jumphp
+  git -C "$ROOT" remote get-url jumphp >/dev/null 2>&1 || {
+    if git -C "$ROOT" remote get-url origin 2>/dev/null | grep -q 'davidnurdin/jumPhp'; then remote=origin
+    else git -C "$ROOT" remote add jumphp "$REPO_URL"; fi
+  }
+  [ -z "$(git -C "$ROOT" status --porcelain)" ] || die "commit your changes first (git status)"
+  say "merging $remote/main"
+  git -C "$ROOT" pull --no-rebase --no-edit "$remote" main
+  say "updated. The engine changed? bin/jumphp engine:download (or engine:build); then bin/jumphp setup"
 }
 
 cmd_new() {
@@ -279,14 +337,79 @@ cmd_export_desktop() {
 }
 
 cmd_deploy() {
-  local game="${1:-}"; local dir; dir="$(game_dir "$game")"
-  [ -n "${JUMPHP_DEPLOY_TARGET:-}" ] || die "set JUMPHP_DEPLOY_TARGET in .env (user@host:/var/www/games or a local folder)"
+  if [ -n "${JUMPHP_SERVER:-}" ]; then cmd_server_deploy "$@"; return; fi
+  local game="${1:-${JUMPHP_GAME:-}}"; local dir; dir="$(game_dir "$game")"
+  [ -n "${JUMPHP_DEPLOY_TARGET:-}" ] || die "no server: bin/jumphp deploy:setup (or JUMPHP_DEPLOY_TARGET in .env for a plain rsync)"
   [ -f "$ROOT/$dir/dist/web/index.html" ] || die "no browser build: bin/jumphp build $game"
   say "rsync $dir/dist/web -> $JUMPHP_DEPLOY_TARGET/$game/"
   docker run --rm -v "$ROOT/$dir/dist/web:/src:ro" -v "${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent" -e SSH_AUTH_SOCK=/ssh-agent \
     -v "$HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro" \
     ${JUMPHP_DEPLOY_LOCAL:+-v "$JUMPHP_DEPLOY_TARGET:$JUMPHP_DEPLOY_TARGET"} \
     instrumentisto/rsync-ssh rsync -az --delete /src/ "$JUMPHP_DEPLOY_TARGET/$game/"
+}
+
+server_dir() { echo "${JUMPHP_SERVER_DIR:-/opt/jumphp/${JUMPHP_GAME:-site}}"; }
+
+# Your server (bin/jumphp deploy:setup): the browser builds in site/ (one game at the root, several: a home page
+# + <game>/), the compose file of the mode (docker/server/<mode>), its .env; rsync, then docker compose up there.
+cmd_server_deploy() {
+  local target="$JUMPHP_SERVER" mode="${JUMPHP_SERVER_MODE:-frankenphp}" dir; dir="$(server_dir)"
+  [ -n "${JUMPHP_DOMAIN:-}" ] || die "JUMPHP_DOMAIN is empty: bin/jumphp deploy:setup"
+  [ -d "$ROOT/docker/server/$mode" ] || die "JUMPHP_SERVER_MODE: frankenphp, traefik or traefik-external"
+  command -v rsync >/dev/null && command -v ssh >/dev/null || die "rsync and ssh are needed (bin/jumphp deploy:setup installs them)"
+  local games=("$@")
+  # shellcheck disable=SC2206
+  [ ${#games[@]} -gt 0 ] || games=(${JUMPHP_DEPLOY_GAMES:-${JUMPHP_GAME:-}})
+  [ ${#games[@]} -gt 0 ] || die "which game? bin/jumphp deploy <game> (or JUMPHP_GAME in .env)"
+
+  local out="$ROOT/.build/server"
+  rm -rf "$out" && mkdir -p "$out/site"
+  for game in "${games[@]}"; do game_dir "$game" >/dev/null; cmd_build "$game"; done
+  if [ ${#games[@]} -eq 1 ]; then
+    cp -r "$ROOT/games/${games[0]}/dist/web/." "$out/site/"
+  else
+    for game in "${games[@]}"; do cp -r "$ROOT/games/$game/dist/web" "$out/site/$game"; done
+    php_run . -- php tools/pages-index.php .build/server/site "" "${games[@]}"
+  fi
+  cp "$ROOT/docker/server/$mode/compose.yaml" "$out/compose.yaml"
+  if [ "$mode" = frankenphp ]; then cp "$ROOT/docker/server/frankenphp/Caddyfile" "$out/Caddyfile"
+  else cp "$ROOT/docker/web/Caddyfile" "$out/Caddyfile"; fi
+  local id; id="$(printf '%s' "${JUMPHP_GAME:-${games[0]}}" | tr -c 'a-z0-9\n' '-')"
+  cat > "$out/.env" <<ENV
+COMPOSE_PROJECT_NAME=jumphp-$id
+JUMPHP_ID=jumphp-$id
+JUMPHP_DOMAIN=$JUMPHP_DOMAIN
+JUMPHP_ACME_EMAIL=${JUMPHP_ACME_EMAIL:-}
+JUMPHP_WEB_IMAGE=$WEB_IMAGE
+JUMPHP_TRAEFIK_IMAGE=$TRAEFIK_IMAGE
+JUMPHP_TRAEFIK_NETWORK=${JUMPHP_TRAEFIK_NETWORK:-traefik}
+JUMPHP_TRAEFIK_ENTRYPOINT=${JUMPHP_TRAEFIK_ENTRYPOINT:-websecure}
+JUMPHP_TRAEFIK_RESOLVER=${JUMPHP_TRAEFIK_RESOLVER:-letsencrypt}
+ENV
+
+  say "sending ${games[*]} to $target:$dir ($mode)"
+  ssh -n "$target" "mkdir -p '$dir' 2>/dev/null || { sudo mkdir -p '$dir' && sudo chown \"\$(id -un)\" '$dir'; }" \
+    || die "ssh $target failed (bin/jumphp deploy:setup)"
+  local changed
+  changed="$(rsync -azc --delete -i "$out/" "$target:$dir/" | grep -E ' (compose\.yaml|Caddyfile|\.env)$' || true)"
+  local up="docker compose up -d --remove-orphans"
+  [ -z "$changed" ] || up="$up --force-recreate"     # a new configuration: restart the containers
+  ssh -n "$target" "cd '$dir' && $up" || die "docker compose failed on the server (Docker installed? bin/jumphp server:setup)"
+  say "online: https://$JUMPHP_DOMAIN/  (the first visit can take a few seconds: the certificate is being issued)"
+}
+
+# Docker on the server (Docker's official install script), the ssh user in the docker group.
+cmd_server_setup() {
+  [ -n "${JUMPHP_SERVER:-}" ] || die "no server: bin/jumphp deploy:setup"
+  say "installing Docker on $JUMPHP_SERVER"
+  ssh -t "$JUMPHP_SERVER" 'S=""; [ "$(id -u)" = 0 ] || S=sudo;
+    if ! command -v docker >/dev/null; then curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && $S sh /tmp/get-docker.sh; fi;
+    [ "$(id -u)" = 0 ] || $S usermod -aG docker "$(id -un)"; docker compose version || $S docker compose version'
+}
+
+cmd_server_logs() {
+  [ -n "${JUMPHP_SERVER:-}" ] || die "no server: bin/jumphp deploy:setup"
+  ssh -t "$JUMPHP_SERVER" "cd '$(server_dir)' && docker compose logs -f --tail 100"
 }
 
 # Static site of several games on GitHub Pages: <site>/index.html + <site>/<game>/ (browser builds), pushed as
@@ -348,8 +471,20 @@ cmd_doctor() {
 }
 
 main() {
+  # `bin/jumphp` alone in a project without a game yet (composer create-project, fresh clone): the wizard
+  if [ $# -eq 0 ] && [ -t 0 ] && [ -t 1 ] && [ -z "${JUMPHP_GAME:-}" ]; then
+    exec bash "$ROOT/tools/init.sh"
+  fi
   local cmd="${1:-help}"; shift || true
   case "$cmd" in
+    init) exec bash "$ROOT/tools/init.sh" "$@" ;;
+    deploy:setup) exec bash "$ROOT/tools/init.sh" --deploy ;;
+    github) exec bash "$ROOT/tools/init.sh" --github ;;
+    server:setup) cmd_server_setup ;;
+    server:logs) cmd_server_logs ;;
+    update) cmd_update ;;
+    engine:download) cmd_engine_download "$@" ;;
+    engine:pack) cmd_engine_pack ;;
     setup) cmd_setup "$@" ;;
     engine:build) cmd_engine_build "$@" ;;
     new) cmd_new "$@" ;;

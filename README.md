@@ -16,6 +16,8 @@ pour jouer sur le bureau). Jamais de PHP, d'emscripten ou de node à installer.
 
 ### Démarrage rapide
 
+Démo en ligne : **https://davidnurdin.github.io/jumPhp/** (hello-threads, Pong, casse-briques).
+
 ```bash
 git clone https://github.com/davidnurdin/jumPhp.git && cd jumPhp
 bin/jumphp setup              # images Docker (une fois, ~3 min)
@@ -84,6 +86,7 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 | `relay up\|down\|logs` | serveur multijoueur sur `ws://localhost:8090/ws` |
 | `export:desktop <jeu>` | une image Docker qui lance le jeu |
 | `deploy <jeu>` | rsync de `dist/web` vers `JUMPHP_DEPLOY_TARGET` (`.env`, voir `.env.dist`) |
+| `pages [jeux...]` | construit les jeux (tous par défaut) et les publie avec une page d'accueil sur GitHub Pages (branche `gh-pages`, remplacée à chaque fois) |
 | `lint` / `doctor` | contrôle de tout le dépôt / diagnostic de la machine |
 
 `make run GAME=pong` etc. existe aussi (`Makefile`).
@@ -133,6 +136,8 @@ Pixel-precise tiles and collisions (slopes, platforms, Tiled maps), entities and
 the desktop). Never install PHP, emscripten or node.
 
 ### Quick start
+
+Live demo: **https://davidnurdin.github.io/jumPhp/** (hello-threads, Pong, Breakout).
 
 ```bash
 git clone https://github.com/davidnurdin/jumPhp.git && cd jumPhp
@@ -202,6 +207,7 @@ breaker was written that way, by an AI that had only read this file.
 | `relay up\|down\|logs` | multiplayer server on `ws://localhost:8090/ws` |
 | `export:desktop <game>` | a Docker image that runs the game |
 | `deploy <game>` | rsync `dist/web` to `JUMPHP_DEPLOY_TARGET` (`.env`, see `.env.dist`) |
+| `pages [games...]` | builds the games (default: all) and publishes them with a home page on GitHub Pages (`gh-pages` branch, replaced each time) |
 | `lint` / `doctor` | checks the whole repository / diagnoses the machine |
 
 `make run GAME=pong` etc. also exists (`Makefile`).

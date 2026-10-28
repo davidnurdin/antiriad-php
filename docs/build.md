@@ -62,3 +62,10 @@ et `version.json` ne doivent pas être mis en cache longtemps.
 `user@serveur:/var/www/jeux`, avec votre agent SSH). Le relais en production : le dossier
 `server/` de php-wasm-network (Caddy en TLS + relais + coturn) ; les jeux utilisent alors
 `net_url: wss://votre-domaine/ws` dans `game.yaml` ou `?net=` dans l'URL.
+
+`bin/jumphp pages [jeux...]` : construit les jeux (tous par défaut), génère une page d'accueil à partir de
+leurs `game.json` (`tools/pages-index.php`) et pousse le tout comme unique commit de la branche `gh-pages`
+du remote git (`JUMPHP_PAGES_REMOTE`, `origin` par défaut ; `JUMPHP_PAGES_BRANCH`, `gh-pages` par défaut).
+GitHub Pages sert alors `https://<compte>.github.io/<dépôt>/`. La branche est remplacée à chaque
+publication : c'est une branche de déploiement, sans historique à garder. Les Web Workers de `JumPHP\Async`
+n'ont besoin d'aucun en-tête particulier, donc GitHub Pages convient tel quel.

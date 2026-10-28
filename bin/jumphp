@@ -43,6 +43,8 @@ Games (<game> = a folder of games/, e.g. pong)
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
   deploy <game>             rsync dist/web to $JUMPHP_DEPLOY_TARGET/<game>/ (.env)
+  pages [game...]           build the games (default: all) + a home page, publish them on the gh-pages
+                            branch of the git remote (GitHub Pages; the branch is replaced each time)
 
 Engine
   test engine               engine unit tests + phpstan
@@ -276,6 +278,46 @@ cmd_deploy() {
     instrumentisto/rsync-ssh rsync -az --delete /src/ "$JUMPHP_DEPLOY_TARGET/$game/"
 }
 
+# Static site of several games on GitHub Pages: <site>/index.html + <site>/<game>/ (browser builds), pushed as
+# the only commit of the gh-pages branch (a deploy branch: its history is replaced each time).
+# JUMPHP_PAGES_REMOTE (origin) / JUMPHP_PAGES_BRANCH (gh-pages) change where it goes.
+cmd_pages() {
+  command -v git >/dev/null || die "git is needed on the host for bin/jumphp pages"
+  local remote="${JUMPHP_PAGES_REMOTE:-origin}" branch="${JUMPHP_PAGES_BRANCH:-gh-pages}" url
+  url="$(git -C "$ROOT" remote get-url "$remote" 2>/dev/null)" || die "no git remote '$remote' (git remote add $remote <url>)"
+  [ -f "$ENGINE_DIR/php-web.wasm" ] || die "no browser engine: bin/jumphp engine:build first (~25 min once)"
+  local games=("$@")
+  if [ ${#games[@]} -eq 0 ]; then
+    for d in "$ROOT"/games/*/; do [ -f "$d/config/game.yaml" ] && games+=("$(basename "$d")"); done
+  fi
+  [ ${#games[@]} -gt 0 ] || die "no game to publish"
+
+  local site="$ROOT/.build/pages"
+  rm -rf "$site" && mkdir -p "$site"
+  for game in "${games[@]}"; do
+    game_dir "$game" >/dev/null
+    cmd_build "$game"
+    cp -r "$ROOT/games/$game/dist/web" "$site/$game"
+  done
+  touch "$site/.nojekyll"   # serve files as they are (no Jekyll processing)
+
+  # https address of the repository (git@github.com:owner/repo.git -> https://github.com/owner/repo)
+  local web; web="$(printf '%s' "$url" | sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##; s#^https://[^@/]+@#https://#')"
+  php_run . -- php tools/pages-index.php .build/pages "$web" "${games[@]}"
+
+  say "publishing ${games[*]} -> $remote $branch"
+  git -C "$site" init -q -b "$branch"
+  git -C "$site" add -A
+  git -C "$site" commit -q -m "Browser builds: ${games[*]} ($(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo local))"
+  git -C "$site" push -q -f "$url" "$branch"
+  rm -rf "$site/.git"
+  if [[ "$web" =~ ^https://github\.com/([^/]+)/([^/]+)$ ]]; then
+    say "done: https://${BASH_REMATCH[1]}.github.io/${BASH_REMATCH[2]}/  (GitHub deploys it in ~1 min; first time: Settings > Pages > branch $branch)"
+  else
+    say "done: pushed to $remote $branch"
+  fi
+}
+
 cmd_lint() {
   say "php -l (engine, skeleton, games)"
   php_run . -- sh -c 'find engine/src engine/bootstrap engine/tests skeleton games tools -name "*.php" -not -path "*/vendor/*" -not -path "*/.build/*" -print0 | xargs -0 -n1 php -l >/dev/null'
@@ -311,6 +353,7 @@ main() {
     relay) cmd_relay "$@" ;;
     export:desktop) cmd_export_desktop "$@" ;;
     deploy) cmd_deploy "$@" ;;
+    pages) cmd_pages "$@" ;;
     lint) cmd_lint ;;
     doctor) cmd_doctor ;;
     php) local d="${1:-.}"; shift || true; php_run "$d" -- php "$@" ;;

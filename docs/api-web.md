@@ -48,7 +48,9 @@ puis éventuellement un shader de post-traitement sur toute l'image :
   cette couleur et on dessine le HUD par-dessus. Une teinte plus sombre de la clé assombrit la 3D, ce qui
   fait marcher les fondus et les menus translucides ;
 - couche `above` : la 3D se dessine sur la 2D (alpha) ;
-- résolution `view` (la taille de game.yaml, gros pixels rétro) ou `native` (pixels de l'écran).
+- résolution `view` (la taille de game.yaml, gros pixels rétro) ou `native` (pixels de l'écran) ;
+- `setSupersample(2)` : la couche est dessinée deux fois plus grande puis lissée (bords sans escalier),
+  dans la limite de 2560 pixels de large.
 
 ```php
 $gl = $this->engine->gl();

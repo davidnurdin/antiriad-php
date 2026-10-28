@@ -628,7 +628,7 @@ the browser (the same `gl*` calls compiled by emscripten). Write **GLSL ES 1.00*
 `sin(x * 500.0)`: NaN on some GPUs).
 
 - High level, `$this->engine->gl()` (`WebGl`): a 3D layer under / over the 2D and post-processing of the whole
-  picture. `setLayer('below'|'above', 'view'|'native', $keyColour)` (below: the 3D shows where the 2D is the key
+  picture. `setLayer('below'|'above', 'view'|'native', $keyColour)` (`setSupersample(2)`: the layer drawn at 2x, smoothed: anti-aliased) (below: the 3D shows where the 2D is the key
   colour, e.g. clear with `[255, 0, 255]` and draw the HUD), resources once in `enter()`: `program($vsGlsl, $fsGlsl)`,
   `buffer($floats)`, `updateBuffer()`, `indexBuffer($ints)`, `texture('assets/x.png')`, `textureFromRgba($w, $h, $bytes)`;
   each frame in `render()`: `clear($colour)`, `draw($program, ['attributes' => ['a_pos' => [$buffer, 3, $stride,

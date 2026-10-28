@@ -21,34 +21,108 @@ final class Meshes
         uniform mat4 u_viewProj;
         uniform mat4 u_model;
         varying vec3 v_color;
-        varying float v_light;
-        varying float v_depth;
+        varying vec3 v_normal;
+        varying vec3 v_world;
         void main() {
-            vec3 n = normalize((u_model * vec4(a_normal, 0.0)).xyz);
-            v_light = 0.4 + 0.6 * max(dot(n, normalize(vec3(-0.35, 0.85, -0.45))), 0.0);
+            vec4 world = u_model * vec4(a_pos, 1.0);
+            v_world = world.xyz;
+            v_normal = (u_model * vec4(a_normal, 0.0)).xyz;
             v_color = a_color;
-            gl_Position = u_viewProj * u_model * vec4(a_pos, 1.0);
-            v_depth = gl_Position.w;
+            gl_Position = u_viewProj * world;
         }
         GLSL;
 
-    // vertex colour x light (+ glow), fog towards the horizon colour, alpha for the shadow
+    /**
+     * Per-pixel shading, one program for everything (u_material): 0 track (glossy dark tiles, neon borders,
+     * a light wave, the ball's soft shadow and glow), 1 ball (shiny, reflects the sky), 2 gem, 3 particle
+     * (flat, emissive), 4 the grid far below the track. Distance fog towards the horizon colour.
+     * highp when the GPU has it: world coordinates go through fract().
+     */
     public const FRAGMENT = <<<'GLSL'
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
+        uniform vec3 u_eye;
         uniform vec3 u_fog;
+        uniform vec3 u_skyTop;
+        uniform vec3 u_sun;
+        uniform vec3 u_tint;
         uniform vec3 u_glow;
+        uniform vec4 u_ball;
+        uniform float u_material;
         uniform float u_alpha;
+        uniform float u_time;
         varying vec3 v_color;
-        varying float v_light;
-        varying float v_depth;
+        varying vec3 v_normal;
+        varying vec3 v_world;
+
+        // what a shiny surface reflects: the sky gradient and the sun ahead
+        vec3 sky(vec3 r) {
+            vec3 c = mix(u_fog, u_skyTop, clamp(r.y * 2.0, 0.0, 1.0));
+            return c + u_sun * pow(max(dot(r, normalize(vec3(0.0, 0.1, 1.0))), 0.0), 16.0) * 1.3;
+        }
+
         void main() {
-            vec3 color = v_color * v_light + u_glow;
-            float fog = clamp((v_depth - 14.0) / 32.0, 0.0, 1.0);
+            vec3 n = normalize(v_normal);
+            vec3 toEye = u_eye - v_world;
+            float dist = length(toEye);
+            vec3 v = toEye / dist;
+            vec3 l = normalize(vec3(-0.35, 0.8, -0.5));
+            vec3 r = reflect(-v, n);
+            float diffuse = max(dot(n, l), 0.0);
+            float fresnel = pow(1.0 - max(dot(n, v), 0.0), 4.0);
+            vec3 ambient = mix(u_fog * 0.5, u_skyTop + 0.12, n.y * 0.5 + 0.5);
+            vec3 neonColor = v_color * 1.25 + 0.2;
+            vec3 color;
+            if (u_material < 0.5) {
+                if (n.y > 0.5) {
+                    vec2 t = fract(vec2(v_world.x + 0.5, v_world.z));
+                    float e = min(min(t.x, 1.0 - t.x), min(t.y, 1.0 - t.y));
+                    float neon = smoothstep(0.11, 0.035, e);
+                    float inner = smoothstep(0.15, 0.175, e) * smoothstep(0.205, 0.18, e);
+                    color = v_color * 0.32 * (ambient + diffuse) + sky(r) * (0.06 + 0.55 * fresnel);
+                    color += neonColor * (neon * 1.35 + inner * 0.3);
+                    float wave = pow(0.5 + 0.5 * sin(6.28318 * fract(v_world.z / 32.0 - u_time * 0.45)), 16.0);
+                    color += v_color * wave * 0.35 * (1.0 - neon);
+                } else {
+                    float y = v_world.y;
+                    float rim = max(smoothstep(0.06, 0.0, abs(y)), smoothstep(0.06, 0.0, abs(y - 1.0)));
+                    color = v_color * (0.18 + 0.45 * diffuse) * (0.25 + 0.75 * clamp(y + 0.5, 0.0, 1.0));
+                    color += neonColor * rim * 1.2;
+                }
+                // the ball: a soft shadow under it, some of its light around it
+                float d = length(v_world.xz - u_ball.xz);
+                float above = u_ball.y - v_world.y;
+                if (above > -0.03) {
+                    float spread = u_ball.w * (1.0 + above * 0.45);
+                    float s = (1.0 - smoothstep(spread * 0.35, spread + 0.15, d)) * clamp(1.0 - above / 5.0, 0.0, 1.0);
+                    color *= 1.0 - 0.75 * s;
+                }
+                color += vec3(1.0, 0.5, 0.55) * 0.16 / (1.0 + d * d * 3.0 + above * above * 3.0);
+            } else if (u_material < 1.5) {
+                vec3 h = normalize(l + v);
+                float spec = pow(max(dot(n, h), 0.0), 70.0);
+                color = v_color * (ambient * 0.45 + diffuse * 0.75) + sky(r) * (0.12 + 0.6 * fresnel) + vec3(spec * 1.4);
+                color += vec3(0.35, 0.7, 1.0) * fresnel * 0.6;
+            } else if (u_material < 2.5) {
+                vec3 h = normalize(l + v);
+                color = v_color * (0.7 + 0.6 * diffuse) + vec3(pow(max(dot(n, h), 0.0), 24.0)) + v_color * fresnel;
+            } else if (u_material < 3.5) {
+                color = v_color;
+            } else {
+                vec2 g = abs(fract(v_world.xz / 2.5) - 0.5);
+                float line = smoothstep(0.45, 0.5, max(g.x, g.y)) * clamp(1.0 - dist / 48.0, 0.0, 1.0);
+                color = u_fog * 0.3 + u_tint * line * 0.75;
+            }
+            color += u_glow;
+            float fog = clamp((dist - 12.0) / 38.0, 0.0, 1.0);
             gl_FragColor = vec4(mix(color, u_fog, fog * fog), u_alpha);
         }
         GLSL;
 
-    // the sky: a gradient and a striped sun on the horizon (a full-screen quad, behind everything)
+    // the sky: a gradient, stars, a striped sun behind a mountain ridge (a full-screen quad, behind everything)
     public const SKY_VERTEX = <<<'GLSL'
         attribute vec2 a_pos;
         varying vec2 v_uv;
@@ -59,36 +133,75 @@ final class Meshes
         GLSL;
 
     public const SKY_FRAGMENT = <<<'GLSL'
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         uniform vec3 u_top;
         uniform vec3 u_bottom;
         uniform vec3 u_sun;
         uniform float u_aspect;
         uniform float u_time;
         varying vec2 v_uv;
+
+        float hash(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+        }
+
         void main() {
-            vec3 color = mix(u_bottom, u_top, smoothstep(0.45, 1.0, v_uv.y));
-            vec2 d = vec2((v_uv.x - 0.5) * u_aspect, v_uv.y - 0.58);
-            float r = length(d);
-            float stripes = step(0.45, fract(v_uv.y * 38.0 - u_time * 0.4)) + step(0.0, d.y);
-            if (r < 0.2 && stripes > 0.5) {
-                color = mix(u_sun, vec3(1.0, 0.95, 0.6), clamp(d.y * 4.0 + 0.4, 0.0, 1.0));
+            vec2 uv = vec2(v_uv.x * u_aspect, v_uv.y);
+            vec3 color = mix(u_bottom, u_top, smoothstep(0.55, 1.0, v_uv.y));
+            // stars, twinkling
+            vec2 cell = floor(uv * 70.0);
+            float h = hash(cell);
+            if (h > 0.965) {
+                vec2 at = (cell + 0.25 + 0.5 * vec2(hash(cell + 7.0), hash(cell + 13.0))) / 70.0;
+                float tw = 0.6 + 0.4 * sin(u_time * (1.5 + 3.0 * h) + h * 40.0);
+                color += vec3(0.9, 0.9, 1.0) * tw * smoothstep(0.0035, 0.0, length(uv - at)) * smoothstep(0.68, 0.9, v_uv.y);
             }
-            color += u_sun * 0.25 * exp(-r * 6.0);
+            // the sun: stripes in its lower half, a large glow
+            vec2 d = vec2((v_uv.x - 0.5) * u_aspect, v_uv.y - 0.655);
+            float r = length(d);
+            float stripes = step(0.42, fract(v_uv.y * 34.0 - u_time * 0.35)) + step(0.0, d.y + 0.03);
+            float disc = smoothstep(0.205, 0.2, r) * min(stripes, 1.0);
+            vec3 sunColor = mix(u_sun, vec3(1.0, 0.95, 0.65), clamp(d.y * 4.0 + 0.5, 0.0, 1.0));
+            color = mix(color, sunColor * 1.15, disc);
+            color += u_sun * (0.35 * exp(-r * 5.0) + 0.12 * exp(-r * 1.6));
+            // mountains: a ridge of small sines, a neon line on top
+            float x = v_uv.x * u_aspect;
+            float ridge = 0.62 + 0.035 * sin(x * 6.0 + 1.0) + 0.02 * sin(x * 15.0 + 2.0) + 0.008 * sin(x * 37.0);
+            if (v_uv.y < ridge) {
+                color = mix(u_bottom, u_top, 0.35) * 0.55 + u_sun * 0.06 * smoothstep(ridge - 0.08, ridge, v_uv.y);
+            }
+            color += u_sun * 0.8 * smoothstep(0.004, 0.0, abs(v_uv.y - ridge));
             gl_FragColor = vec4(color, 1.0);
         }
         GLSL;
 
-    /** Post-processing of the whole picture: a soft vignette and a light scanline. */
+    /**
+     * Post-processing of the whole picture (at the window's resolution): bloom (the bright pixels glow),
+     * a slight colour fringe towards the edges, a soft vignette.
+     */
     public const POST = <<<'GLSL'
         void main() {
-            vec3 color = texture2D(u_frame, v_uv).rgb;
+            vec2 px = 1.0 / u_resolution;
             vec2 d = v_uv - 0.5;
-            color *= 1.0 - dot(d, d) * 0.7;
-            // one dark line per game pixel row; fract() keeps sin() precise in mediump
-            float line = sin(3.14159 * fract(v_uv.y * u_view.y * u_resolution.y / u_viewport.w));
-            color *= 0.9 + 0.1 * line * line;
-            gl_FragColor = vec4(color * 1.08, 1.0);
+            vec2 fringe = d * 0.003;
+            vec3 color = vec3(texture2D(u_frame, v_uv - fringe).r, texture2D(u_frame, v_uv).g, texture2D(u_frame, v_uv + fringe).b);
+            vec3 glow = vec3(0.0);
+            float radius = u_resolution.y / 120.0;
+            for (int i = 0; i < 12; i++) {
+                float a = float(i) * 0.5236 + 0.26;
+                vec2 dir = vec2(cos(a), sin(a)) * px * radius;
+                glow += max(texture2D(u_frame, v_uv + dir).rgb - 0.5, 0.0);
+                glow += max(texture2D(u_frame, v_uv + dir * 2.6).rgb - 0.5, 0.0) * 0.7;
+            }
+            color += glow * 0.11;
+            color *= 1.0 - dot(d, d) * 0.85;
+            gl_FragColor = vec4(color * 1.05, 1.0);
         }
         GLSL;
 
@@ -145,12 +258,9 @@ final class Meshes
                 }
                 $block = $h > 0;
                 $top = self::unit($block ? $zone['block'] : (($row + $lane) % 2 ? $zone['a'] : $zone['b']));
-                $edge = [min(1.0, $top[0] * 1.25 + 0.1), min(1.0, $top[1] * 1.25 + 0.1), min(1.0, $top[2] * 1.25 + 0.1)];
-                $side = [$top[0] * 0.55, $top[1] * 0.55, $top[2] * 0.55];
+                $side = $top;
                 [$x0, $x1, $z0, $z1, $y0] = [$lane - 2.47, $lane - 1.53, $row + 0.03, $row + 0.97, -0.5];
                 self::quad($out, [$x0, $h, $z0], [$x1, $h, $z0], [$x1, $h, $z1], [$x0, $h, $z1], $top, [0, 1, 0]);
-                // a bright strip on the front edge: the neon look
-                self::quad($out, [$x0, $h + 0.002, $z0], [$x1, $h + 0.002, $z0], [$x1, $h + 0.002, $z0 + 0.06], [$x0, $h + 0.002, $z0 + 0.06], $edge, [0, 1, 0]);
                 if (($track->height($row - 1, $lane) ?? -9.0) < $h) {
                     self::quad($out, [$x0, $y0, $z0], [$x1, $y0, $z0], [$x1, $h, $z0], [$x0, $h, $z0], $side, [0, 0, -1]);
                 }
@@ -170,7 +280,7 @@ final class Meshes
      * @param int[] $a @param int[] $b
      * @return float[]
      */
-    public static function sphere(array $a, array $b, int $rings = 10, int $segments = 14): array
+    public static function sphere(array $a, array $b, int $rings = 24, int $segments = 32): array
     {
         $point = function (int $ring, int $seg) use ($rings, $segments): array {
             $theta = M_PI * $ring / $rings;
@@ -180,7 +290,7 @@ final class Meshes
         $out = [];
         for ($ring = 0; $ring < $rings; $ring++) {
             for ($seg = 0; $seg < $segments; $seg++) {
-                $color = self::unit(intdiv($seg, 2) % 2 ? $a : $b);
+                $color = self::unit(intdiv($seg, 4) % 2 ? $a : $b);
                 $p = [$point($ring, $seg), $point($ring + 1, $seg), $point($ring + 1, $seg + 1), $point($ring, $seg + 1)];
                 foreach ([0, 1, 2, 0, 2, 3] as $i) {
                     array_push($out, ...$p[$i], ...$color, ...$p[$i]);
@@ -210,17 +320,11 @@ final class Meshes
         return $out;
     }
 
-    /** A flat disc of radius 1 at y = 0 (the shadow of the ball). @return float[] */
-    public static function disc(int $segments = 16): array
+    /** A flat square -1..1 at y = 0 (the grid below the track). @return float[] */
+    public static function plane(): array
     {
         $out = [];
-        for ($i = 0; $i < $segments; $i++) {
-            $a = 2 * M_PI * $i / $segments;
-            $b = 2 * M_PI * ($i + 1) / $segments;
-            foreach ([[0, 0], [cos($a), sin($a)], [cos($b), sin($b)]] as [$x, $z]) {
-                array_push($out, $x, 0.0, $z, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-            }
-        }
+        self::quad($out, [-1, 0, -1], [1, 0, -1], [1, 0, 1], [-1, 0, 1], [1, 1, 1], [0, 1, 0]);
         return $out;
     }
 

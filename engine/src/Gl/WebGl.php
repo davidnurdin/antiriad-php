@@ -104,15 +104,16 @@ class WebGl extends EventEmitter
     private ?array $post = null;
     /** @var array<int, array{0: string, 1: mixed, 2?: mixed}> the commands of this frame */
     private array $commands = [];
-    /** @var array{fb: int, tex: int, depth: int, w: int, h: int}|null */
+    /** @var array{fb: int, tex: int, depth: int, w: int, h: int, smooth?: bool}|null */
     private ?array $layerTarget = null;
-    /** @var array{fb: int, tex: int, depth: int, w: int, h: int}|null */
+    /** @var array{fb: int, tex: int, depth: int, w: int, h: int, smooth?: bool}|null */
     private ?array $compTarget = null;
     private int $frameTex = 0;
     /** @var int[] size of $frameTex */
     private array $frameSize = [0, 0];
     private int $composite = 0;
     private bool $hooked = false;
+    private int $supersample = 1;
     /** @var \Closure(): float */
     private \Closure $clock;
 
@@ -149,6 +150,15 @@ class WebGl extends EventEmitter
         $c = Color::of($key);
         $this->layer = ['position' => $position, 'resolution' => $resolution, 'key' => [$c->r / 255, $c->g / 255, $c->b / 255]];
         $this->hook();
+    }
+
+    /**
+     * Draws the layer at $n x its size (2: 4 samples per pixel), smoothed down when composed: anti-aliased
+     * edges. Capped so that the layer stays at most 2560 pixels wide.
+     */
+    public function setSupersample(int $n): void
+    {
+        $this->supersample = max(1, min(4, $n));
     }
 
     public function removeLayer(): void
@@ -359,9 +369,10 @@ class WebGl extends EventEmitter
         }
 
         if ($this->layer !== null) {
-            $this->layerTarget = $this->resized($this->layerTarget, $w, $h, true);
+            $ss = max(1, min($this->supersample, intdiv(2560, $w)));
+            $this->layerTarget = $this->resized($this->layerTarget, $w * $ss, $h * $ss, true, $ss > 1);
             glBindFramebuffer(GL_FRAMEBUFFER, $this->layerTarget['fb']);
-            glViewport(0, 0, $w, $h);
+            glViewport(0, 0, $w * $ss, $h * $ss);
             glClearColor(0, 0, 0, 0);
             glDepthMask(1);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -428,18 +439,18 @@ class WebGl extends EventEmitter
     }
 
     /**
-     * @param array{fb: int, tex: int, depth: int, w: int, h: int}|null $target
-     * @return array{fb: int, tex: int, depth: int, w: int, h: int}
+     * @param array{fb: int, tex: int, depth: int, w: int, h: int, smooth?: bool}|null $target
+     * @return array{fb: int, tex: int, depth: int, w: int, h: int, smooth?: bool}
      */
-    private function resized(?array $target, int $w, int $h, bool $depth): array
+    private function resized(?array $target, int $w, int $h, bool $depth, bool $smooth = false): array
     {
-        if ($target !== null && $target['w'] === $w && $target['h'] === $h) {
+        if ($target !== null && $target['w'] === $w && $target['h'] === $h && ($target['smooth'] ?? false) === $smooth) {
             return $target;
         }
         if ($target !== null) {
             $this->gl->deleteTarget($target);
         }
-        return $this->gl->renderTarget($w, $h, $depth);
+        return ['smooth' => $smooth] + $this->gl->renderTarget($w, $h, $depth, $smooth);
     }
 
     private function frameTexture(int $w, int $h): void
@@ -452,7 +463,8 @@ class WebGl extends EventEmitter
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, $this->frameTex);
         if ($this->frameSize !== [$w, $h]) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, $w, $h, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+            // RGB: WebGL refuses to copy a framebuffer without alpha (the window, 'native') into an RGBA texture
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, $w, $h, 0, GL_RGB, GL_UNSIGNED_BYTE, null);
             foreach ([GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER] as $p) {
                 glTexParameteri(GL_TEXTURE_2D, $p, GL_NEAREST);
             }

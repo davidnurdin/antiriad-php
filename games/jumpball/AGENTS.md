@@ -24,15 +24,21 @@ bin/jumphp build jumpball && bin/jumphp webshot jumpball 8 '[[1,"Enter"],[3,"Arr
   - `Run`: the ball (fixed step 120 Hz from the scenes), states run / fall / crash / over, events read by the
     scene for sounds, and `autopilot()` (the bot of the title screen, the demo and the smoke test).
 - **Drawing** (`src/Gfx`): `World` (a shared service) draws a `Run`. OpenGL / WebGL layer below the 2D
-  (`KEY` magenta), the track in chunks of 16 rows, one dynamic buffer each, recycled with `updateBuffer()`
-  when a chunk leaves the view, meshes and GLSL in `Meshes` (vertex = position, colour, normal), sky =
-  full-screen quad shader, post shader = vignette. Without OpenGL: `SoftwareView` (same camera matrix, convex faces
-  filled per pixel row, far to near, the ball after its row).
+  (`KEY` magenta) at the window's resolution, supersampled x2 (`setSupersample(2)`: smooth edges); the HUD keeps
+  its big pixels. The track in chunks of 16 rows, one dynamic buffer each, recycled with `updateBuffer()` when a
+  chunk leaves the view. `Meshes`: vertex = position, colour, normal; ONE lit program for everything, chosen by
+  `u_material` (0 track: dark glossy tiles + neon borders computed from the world position, a light wave, the
+  ball's soft shadow and glow; 1 ball: shiny, reflects the sky; 2 gem; 3 particle; 4 the neon grid 7 m below).
+  Sky = full-screen quad (gradient, stars, striped sun, mountain ridge). Post shader = bloom (24 taps), colour
+  fringe, vignette. Particles (`World::particles()`): sparks when a gem is taken, a trail when fast.
+  Without OpenGL: `SoftwareView` (same camera matrix, convex faces filled per pixel row, far to near, the ball
+  after its row).
 - **Scenes**: `TitleScene` (menu over the bot's run) → `PlayScene` (params `demo`, `seed`) → `GameOverScene`
   (overlay: retry / title); `PauseScene` (overlay, also `pause_scene` of game.yaml), `OptionsScene` (pushed).
 - **Controls** (`config/input.yaml`): left / right (or the left stick, analog), `jump` = Space, Up, W, Z,
   pad A, a tap. Holding jump jumps again at each landing.
 - **Smoke test**: `PlayScene` with `{demo: true, seed: 42}`; the bot restarts by itself when it falls.
 - **Non-obvious**: a program keeps its uniform values between draws: `World` passes every uniform of the lit
-  program on each draw. Tuning: `Run` constants (speed, jump, gravity), `Track::segment()`
+  program on each draw. Shaders use highp when the GPU has it (world coordinates through `fract()`) and keep
+  `sin()` arguments small. Tuning: `Run` constants (speed, jump, gravity), `Track::segment()`
   odds, `Meshes::ZONES` colours.

@@ -4,8 +4,10 @@ Un jeu de course en 3D écrit en PHP. Une balle roule toute seule sur une piste 
 vite. Il faut se diriger et sauter pour éviter les trous et les blocs, et ramasser les gemmes au passage.
 
 - **Vraie 3D sur les deux cibles** (`JumPHP\Gl`, extension PHP-OpenGL : OpenGL sur le bureau, WebGL dans le
-  navigateur) : piste éclairée, ciel en shader avec un soleil rétro, ombre de la balle, post-traitement
-  (vignette, lignes). Le HUD et les menus sont dessinés en 2D par SDL par-dessus.
+  navigateur), en pleine résolution avec anticrénelage (suréchantillonnage x2). Dalles sombres et brillantes
+  à bords néon, balle qui reflète le ciel, ombre douce, grille néon sous la piste, ciel étoilé avec un soleil
+  rayé derrière des montagnes, étincelles et traînée, post-traitement (halo lumineux, vignette). Le HUD et
+  les menus restent en gros pixels, dessinés en 2D par SDL par-dessus.
 - **Sans OpenGL** (pas de GPU, `JUMPHP_GL=0`) : le même jeu en 3D logicielle (faces remplies, ordre du peintre).
 
 La piste est générée à partir d'une graine : trous sur toute la largeur, voies manquantes, blocs, chemin

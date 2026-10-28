@@ -355,7 +355,7 @@ server_dir() { echo "${JUMPHP_SERVER_DIR:-/opt/jumphp/${JUMPHP_GAME:-site}}"; }
 cmd_server_deploy() {
   local target="$JUMPHP_SERVER" mode="${JUMPHP_SERVER_MODE:-frankenphp}" dir; dir="$(server_dir)"
   [ -n "${JUMPHP_DOMAIN:-}" ] || die "JUMPHP_DOMAIN is empty: bin/jumphp deploy:setup"
-  [ -d "$ROOT/docker/server/$mode" ] || die "JUMPHP_SERVER_MODE: frankenphp, traefik or traefik-external"
+  [ -d "$ROOT/docker/server/$mode" ] || die "JUMPHP_SERVER_MODE: frankenphp, traefik, traefik-external or traefik-passthrough"
   command -v rsync >/dev/null && command -v ssh >/dev/null || die "rsync and ssh are needed (bin/jumphp deploy:setup installs them)"
   local games=("$@")
   # shellcheck disable=SC2206
@@ -372,7 +372,11 @@ cmd_server_deploy() {
     php_run . -- php tools/pages-index.php .build/server/site "" "${games[@]}"
   fi
   cp "$ROOT/docker/server/$mode/compose.yaml" "$out/compose.yaml"
-  if [ "$mode" = frankenphp ]; then cp "$ROOT/docker/server/frankenphp/Caddyfile" "$out/Caddyfile"
+  # modes where FrankenPHP gets the certificate itself: the Caddyfile with the domain
+  if [ "$mode" = frankenphp ] || [ "$mode" = traefik-passthrough ]; then
+    # Caddy refuses an empty "email": without a Let's Encrypt address the line goes
+    if [ -n "${JUMPHP_ACME_EMAIL:-}" ]; then cp "$ROOT/docker/server/frankenphp/Caddyfile" "$out/Caddyfile"
+    else grep -v '^[[:space:]]*email {\$ACME_EMAIL}' "$ROOT/docker/server/frankenphp/Caddyfile" > "$out/Caddyfile"; fi
   else cp "$ROOT/docker/web/Caddyfile" "$out/Caddyfile"; fi
   local id; id="$(printf '%s' "${JUMPHP_GAME:-${games[0]}}" | tr -c 'a-z0-9\n' '-')"
   cat > "$out/.env" <<ENV
@@ -384,6 +388,7 @@ JUMPHP_WEB_IMAGE=$WEB_IMAGE
 JUMPHP_TRAEFIK_IMAGE=$TRAEFIK_IMAGE
 JUMPHP_TRAEFIK_NETWORK=${JUMPHP_TRAEFIK_NETWORK:-traefik}
 JUMPHP_TRAEFIK_ENTRYPOINT=${JUMPHP_TRAEFIK_ENTRYPOINT:-websecure}
+JUMPHP_TRAEFIK_HTTP_ENTRYPOINT=${JUMPHP_TRAEFIK_HTTP_ENTRYPOINT:-web}
 JUMPHP_TRAEFIK_RESOLVER=${JUMPHP_TRAEFIK_RESOLVER:-letsencrypt}
 ENV
 

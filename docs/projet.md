@@ -101,6 +101,7 @@ demande :
   | `frankenphp` | FrankenPHP seul, ports 80 et 443, HTTPS automatique (Caddy + Let's Encrypt) | un serveur dédié au jeu, le plus simple |
   | `traefik` | Traefik (ports 80/443, Let's Encrypt, redirection HTTP → HTTPS) devant FrankenPHP | pour héberger d'autres sites ensuite derrière le même Traefik (réseau Docker `jumphp-traefik`) |
   | `traefik-external` | FrankenPHP seul, branché sur le réseau d'un Traefik déjà installé | le serveur a déjà son Traefik : l'assistant demande son réseau Docker, son point d'entrée HTTPS (`websecure`) et son résolveur de certificats (`letsencrypt`) |
+  | `traefik-passthrough` | FrankenPHP seul, derrière un Traefik déjà installé qui laisse passer le TLS ; FrankenPHP obtient lui-même son certificat | le Traefik du serveur n'a pas de résolveur de certificats qui marche : renseigner `JUMPHP_TRAEFIK_ENTRYPOINT` (le point d'entrée :443) et `JUMPHP_TRAEFIK_HTTP_ENTRYPOINT` (le point d'entrée :80) dans `.env` |
 
 - l'**e-mail Let's Encrypt** (modes `frankenphp` et `traefik`) ;
 - le **dossier** sur le serveur (par défaut `/opt/jumphp/<id>`).

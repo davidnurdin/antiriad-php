@@ -114,7 +114,9 @@ l'utilisateur au groupe `docker`.
 
 1. construit la version navigateur du jeu (`JUMPHP_GAME`), ou de plusieurs jeux :
    `bin/jumphp deploy jeu1 jeu2`, ou `JUMPHP_DEPLOY_GAMES="jeu1 jeu2"`. Avec plusieurs jeux, le site a une
-   page d'accueil et un dossier `/jeu1/`, `/jeu2/` par jeu ;
+   page d'accueil et un dossier `/jeu1/`, `/jeu2/` par jeu. Un seul jeu qui a son propre site
+   (`games/<id>/site/index.html` : page d'accueil, images, `robots.txt`...) : le site est à la racine et le jeu
+   dans `/play/` ; `{{DOMAIN}}` y est remplacé par `JUMPHP_DOMAIN` (liens canoniques, sitemap) ;
 2. prépare `.build/server/` : `site/`, le `compose.yaml` du mode (`docker/server/<mode>/`), le Caddyfile et
    un `.env` ;
 3. l'envoie avec `rsync` (seuls les fichiers modifiés partent) ;

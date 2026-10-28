@@ -366,7 +366,16 @@ cmd_server_deploy() {
   local out="$ROOT/.build/server"
   rm -rf "$out" && mkdir -p "$out/site"
   for game in "${games[@]}"; do game_dir "$game" >/dev/null; cmd_build "$game"; done
-  if [ ${#games[@]} -eq 1 ]; then
+  local pages="$ROOT/games/${games[0]}/site"
+  if [ ${#games[@]} -eq 1 ] && [ -f "$pages/index.html" ]; then
+    # the game's own web site (games/<id>/site/) at the root, the game in play/; {{DOMAIN}} in its pages
+    cp -r "$pages/." "$out/site/"
+    cp -r "$ROOT/games/${games[0]}/dist/web" "$out/site/play"
+    (cd "$pages" && find . -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' -o -name '*.webmanifest' \)) |
+      while read -r file; do
+        sed "s#{{DOMAIN}}#$JUMPHP_DOMAIN#g" "$pages/$file" > "$out/site/$file"
+      done
+  elif [ ${#games[@]} -eq 1 ]; then
     cp -r "$ROOT/games/${games[0]}/dist/web/." "$out/site/"
   else
     for game in "${games[@]}"; do cp -r "$ROOT/games/$game/dist/web" "$out/site/$game"; done

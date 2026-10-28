@@ -7,6 +7,11 @@ use JumPHP\Async\Tasks;
 use JumPHP\Audio\SoundManager;
 use JumPHP\Bridge\JsBridge;
 use JumPHP\Debug\FpsCounter;
+use JumPHP\Device\Device;
+use JumPHP\Device\Lifecycle;
+use JumPHP\Device\Pwa;
+use JumPHP\Gl\WebGl;
+use JumPHP\Http\Http;
 use JumPHP\Input\ActionMap;
 use JumPHP\Input\InputManager;
 use JumPHP\Loop\GameLoop;
@@ -25,7 +30,8 @@ use JumPHP\Util\Time;
  *   input -> network -> sound -> scenes update -> scenes render -> present.
  *
  * Everything a scene needs is a public property: $engine->actions, ->scenes, ->sound, ->sdl, ->options,
- * ->storage, ->config, ->input, ->lang, ->bridge, plus font(), net() and tasks().
+ * ->storage, ->config, ->input, ->lang, ->bridge, plus font(), net(), tasks(), http(), gl(), device(),
+ * lifecycle() and pwa().
  *
  * Events: 'boot', 'frame' (float $dt) after each update, 'quit'.
  */
@@ -41,6 +47,11 @@ class Engine extends EventEmitter
     private ?TextDrawer $font = null;
     private ?NetSession $net = null;
     private ?Tasks $tasks = null;
+    private ?Http $http = null;
+    private ?WebGl $gl = null;
+    private ?Device $device = null;
+    private ?Lifecycle $lifecycle = null;
+    private ?Pwa $pwa = null;
     private ?BitmapFont $debugFont = null;
     /** Game speed multiplier (slow motion, pause = 0). */
     public float $timeScale = 1.0;
@@ -94,6 +105,9 @@ class Engine extends EventEmitter
         $this->debug = (bool)Platform::setting('JUMPHP_DEBUG', false);
 
         $this->scenes->setEngine($this);
+        $this->lifecycle()->attach($this);
+        $this->device();
+        $this->pwa();
         $this->running = true;
         $this->lastTime = Time::now();
         $this->emit('boot');
@@ -110,9 +124,9 @@ class Engine extends EventEmitter
         'down' => ['Down', 'S', 'pad0:down', 'touch:down'],
         'left' => ['Left', 'A', 'pad0:left', 'touch:left'],
         'right' => ['Right', 'D', 'pad0:right', 'touch:right'],
-        'confirm' => ['Return', 'Space', 'Keypad Enter', 'pad0:button0', 'touch:tap'],
-        'back' => ['Escape', 'Backspace', 'pad0:button1'],
-        'pause' => ['Escape', 'P', 'pad0:button7'],
+        'confirm' => ['Return', 'Space', 'Keypad Enter', 'pad0:a', 'touch:tap'],
+        'back' => ['Escape', 'Backspace', 'pad0:b'],
+        'pause' => ['Escape', 'P', 'pad0:start'],
     ];
 
     /** @return array{0: ?string, 1: array} JUMPHP_SCENE (+ JUMPHP_SCENE_PARAMS JSON) overrides game.yaml; smoke tests use game.smoke */
@@ -145,12 +159,14 @@ class Engine extends EventEmitter
         $this->time += $dt;
 
         $renderer = $this->sdl->getRenderer();
+        $this->bridge->poll();
         $this->input->poll($renderer);
         if ($this->net !== null && $this->net->isActive()) {
             $this->net->poll();
         }
         $this->sound->update();
         $this->tasks?->poll();
+        $this->http?->poll();
         $this->scenes->update($dt);
         $this->emit('frame', [$dt]);
         $this->input->endFrame();
@@ -164,6 +180,7 @@ class Engine extends EventEmitter
             $this->drawDebug();
         }
         $renderer->endFrame();
+        $this->gl?->flush($renderer, $this->time);
         $this->frame++;
     }
 
@@ -229,6 +246,36 @@ class Engine extends EventEmitter
     public function tasks(): Tasks
     {
         return $this->tasks ??= new Tasks($this->config);
+    }
+
+    /** Asynchronous HTTP requests (fetch in the browser, curl / sockets on desktop). */
+    public function http(): Http
+    {
+        return $this->http ??= new Http($this->bridge);
+    }
+
+    /** WebGL in the browser: shaders, 3D layer, post-processing (does nothing on desktop: isAvailable()). */
+    public function gl(): WebGl
+    {
+        return $this->gl ??= new WebGl($this->bridge);
+    }
+
+    /** Phone features: vibration, screen awake, orientation, clipboard, tilt, battery... */
+    public function device(): Device
+    {
+        return $this->device ??= new Device($this->bridge, $this);
+    }
+
+    /** Page / window life: hide, show, blur, focus, online, offline, resize, orientation, close. */
+    public function lifecycle(): Lifecycle
+    {
+        return $this->lifecycle ??= new Lifecycle($this);
+    }
+
+    /** Installable / offline game (game.yaml pwa): install(), updateReady(), isOfflineReady()... */
+    public function pwa(): Pwa
+    {
+        return $this->pwa ??= new Pwa($this->bridge, $this->config);
     }
 
     public function isDebug(): bool

@@ -3,6 +3,12 @@
 //
 // URL parameters: ?net=wss://host/ws (relay server) &room=ABCD &lang=fr &debug=1 &back=<url> (where "quit" goes)
 // &workers=N (Web Workers for JumPHP\Async, 0 = none; default: cores - 1, at most 4)
+// Bridge with PHP (JumPHP\Bridge\JsBridge), synchronous with the frames: right before each PHP frame
+// (emscripten preMainLoop) the page's events are written to /tmp/jumphp-events; right after it (postMainLoop)
+// the game's messages (/tmp/jumphp-bridge) are handled and the modules run (jumphp-gl.js: WebGL composition).
+// Modules: jumphp-device.js (page life, phone features), jumphp-http.js (fetch), jumphp-gl.js (WebGL),
+// jumphp-pwa.js (installable / offline game: sw.js), jumphp-gamepad.js (Gamepad API).
+// window.JumPHP.send(type, data) sends a custom event to the game: $engine->bridge->on(type, fn (array $data)).
 // Embedding (games portal): the page posts {type: 'jumphp:ready' | 'jumphp:quit' | 'jumphp:bridge', ...}
 // to window.parent; window.JumPHP.onBridge(message) receives the game's custom JsBridge messages.
 const GAME = window.JUMPHP_GAME || {};
@@ -15,12 +21,68 @@ const statusEl = $('status');
 const barEl = $('bar').firstElementChild;
 const SAVE_DIR = '/game/var';
 const BRIDGE_FILE = '/tmp/jumphp-bridge';
+const EVENTS_FILE = '/tmp/jumphp-events';
 const TASKS_DIR = '/tmp/jumphp-tasks';
 const WORKERS = typeof Worker === 'undefined' ? 0
 	: Math.max(0, Math.min(8, Number(params.get('workers') ?? Math.min(4, (navigator.hardwareConcurrency || 2) - 1)) || 0));
 const lastLines = [];
 
 window.JumPHP = window.JumPHP || { onBridge: null, FS: null };
+
+// --- the bridge with PHP ---------------------------------------------------------------------------------
+let FSref = null;
+let booted = false;
+let callPhp = null;
+const outbox = [];                // events for PHP, in order; a key keeps only the latest one (tilt, resize...)
+const handlers = {};              // PHP message type -> [fn]
+const afterFrame = [];
+const beforeFrame = [];
+const gestures = [];
+function sendToPhp(type, data = {}, key = null) {
+	const event = { ...data, t: type };
+	if (key) {
+		const i = outbox.findIndex((e) => e.key === key);
+		if (i >= 0) outbox.splice(i, 1);
+	}
+	outbox.push({ key, line: JSON.stringify(event) });
+}
+function writeEvents() {
+	if (!FSref || !outbox.length) return;
+	const text = outbox.map((e) => e.line).join('\n') + '\n';
+	outbox.length = 0;
+	try {
+		const old = FSref.analyzePath(EVENTS_FILE).exists ? FSref.readFile(EVENTS_FILE, { encoding: 'utf8' }) : '';
+		FSref.writeFile(EVENTS_FILE, old + text);
+	} catch (e) { console.error('[bridge]', e); }
+}
+// PHP handles the events now, between two frames (the tab is being hidden / closed)
+function deliverNow() {
+	if (!booted || !callPhp) return;
+	writeEvents();
+	try { callPhp('jumphp_events();'); } catch (e) { console.error('[bridge]', e); }
+}
+// for things a browser only allows from a user gesture (fullscreen, sensors permission, clipboard)
+function onGesture(fn) { gestures.push(fn); }
+function runGestures() {
+	for (const fn of gestures.splice(0)) { try { fn(); } catch (e) { console.error(e); } }
+}
+addEventListener('pointerup', runGestures, true);
+addEventListener('keydown', runGestures, true);
+window.JumPHP.send = (type, data) => sendToPhp(String(type), data || {});
+const moduleApi = {
+	canvas,
+	GAME,
+	FS: () => FSref,
+	send: sendToPhp,
+	now: deliverNow,
+	on: (type, fn) => { (handlers[type] ||= []).push(fn); },
+	afterFrame: (fn) => afterFrame.push(fn),
+	beforeFrame: (fn) => beforeFrame.push(fn),
+	gesture: onGesture,
+	enterFullscreen: () => enterFullscreen(),
+	exitFullscreen: () => exitFullscreen(),
+	isFullscreen: () => fullscreenElement(),
+};
 
 // SDL's GLES2 renderer calls glCheckFramebufferStatus at each SDL_SetRenderTarget: in WebGL that waits for
 // the GPU (up to 65 % of a frame). Our targets are always complete. And emscripten enables every WebGL
@@ -96,6 +158,8 @@ function prelude() {
 		`define('JUMPHP_ROOM', ${phpString((params.get('room') || '').toUpperCase())});`,
 		`define('JUMPHP_DEBUG', ${params.get('debug') === '1' ? 'true' : 'false'});`,
 		`define('JUMPHP_WORKERS', ${WORKERS});`,
+		`define('JUMPHP_WEBGL', ${modules.gl && modules.gl.available() ? 'true' : 'false'});`,
+		`define('JUMPHP_STANDALONE', ${matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true ? 'true' : 'false'});`,
 	];
 	const net = params.get('net') || GAME.net_url;
 	if (net) lines.push(`define('JUMPHP_NET_URL', ${phpString(net)});`);
@@ -123,6 +187,8 @@ function pollBridge(FS) {
 			else { $('overlay').querySelector('p').textContent = 'THANKS FOR PLAYING'; $('overlay').style.display = 'flex'; }
 		} else if (msg.t === 'share' && navigator.share) {
 			navigator.share({ title: GAME.title, text: msg.text || '', url: msg.url || location.href }).catch(() => {});
+		} else if (handlers[msg.t]) {
+			for (const fn of handlers[msg.t]) { try { fn(msg); } catch (e) { console.error(`[bridge ${msg.t}]`, e); } }
 		} else {
 			notifyParent({ type: 'jumphp:bridge', game: GAME.id, message: msg });
 			window.JumPHP.onBridge?.(msg);
@@ -201,6 +267,15 @@ function startTasks(FS, wasmBinary) {
 	requestAnimationFrame(pump);
 }
 
+const modules = {};
+async function loadModules() {
+	for (const [name, file] of [['device', 'jumphp-device.js'], ['http', 'jumphp-http.js'], ['gl', 'jumphp-gl.js'], ['pwa', 'jumphp-pwa.js'], ['gamepad', 'jumphp-gamepad.js']]) {
+		try {
+			modules[name] = (await import('./' + versioned(file))).install(moduleApi) || {};
+		} catch (e) { console.error(`[${file}]`, e); }
+	}
+}
+
 async function main() {
 	const { default: createPhpModule } = await import('./' + versioned('php-web.mjs'));
 
@@ -225,8 +300,22 @@ async function main() {
 			if (lastLines.length > 8) lastLines.shift();
 		},
 		onAbort(reason) { fail('The engine crashed: ' + reason); },
+		// around each PHP frame (emscripten main loop): page events in, game messages and WebGL out
+		preMainLoop() {
+			for (const fn of beforeFrame) { try { fn(); } catch (e) { console.error(e); } }
+			writeEvents();
+		},
+		postMainLoop() {
+			pollBridge(FSref);
+			for (const fn of afterFrame) { try { fn(); } catch (e) { console.error(e); } }
+		},
 	});
 	window.JumPHP.FS = FS;
+	FSref = FS;
+	callPhp = (code) => ccall('zend_eval_string', 'number', ['string', 'number', 'string'], [code, 0, 'jumphp events']);
+	// debugging / tests: PHP code between two frames (its echo goes to the console)
+	window.JumPHP.php = (code) => { if (booted) callPhp(code); };
+	await loadModules();
 
 	// the player's files (saves, options): var/ of the game lives in IndexedDB
 	setStatus('Restoring saves...');
@@ -263,9 +352,9 @@ async function main() {
 		}
 	}
 
+	booted = true;
 	await nextFrame();
 	loader.style.display = 'none';
-	setInterval(() => pollBridge(FS), 250);
 	startTasks(FS, wasmBinary);
 	window.JumPHPTouch?.start();
 	notifyParent({ type: 'jumphp:ready', game: GAME.id });

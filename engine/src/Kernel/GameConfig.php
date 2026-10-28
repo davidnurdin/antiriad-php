@@ -30,6 +30,10 @@ final class GameConfig
         'smoke' => [],           // {scene: ..., params: {...}}: what `jumphp test` runs headless
         'online' => false,       // shown by the future games portal (game.json)
         'runtime' => 'default',  // 'async': PHP 8.6 ZTS + TrueAsync on the desktop (real threads, JumPHP\Async)
+        'pwa' => false,          // true / {name, short_name, display, orientation, theme_color, background_color}: installable, offline
+        'pause_scene' => null,   // pushed when the game is hidden / loses the focus (JumPHP\Device\Lifecycle)
+        'pause_on_blur' => true,
+        'mute_when_hidden' => true,
     ];
 
     /** @var array<string, mixed> */

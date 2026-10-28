@@ -108,7 +108,7 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
   moteur PHP WebAssembly chacun) ; sur le runtime par défaut, elle répartit le travail entre les frames. Voir [docs/async.md](docs/async.md) et `games/hello-threads`.
 
 Contraintes du navigateur (détaillées dans [docs/navigateur.md](docs/navigateur.md)) : ne jamais bloquer la
-frame (`sleep`, boucles infinies), entiers 32 bits, réseau uniquement via `JumPHP\Net`, fichiers écrits
+frame (`sleep`, boucles infinies), entiers 32 bits, réseau uniquement via `JumPHP\Net` et `JumPHP\Http`, fichiers écrits
 seulement dans `var/`.
 
 ### Documentation
@@ -120,6 +120,7 @@ seulement dans `var/`.
 - [docs/tiles-collisions.md](docs/tiles-collisions.md) : cartes Tiled, masques, pentes, plateformes
 - [docs/reseau.md](docs/reseau.md) : multijoueur en ligne, serveur relais, tests
 - [docs/async.md](docs/async.md) : threads avec TrueAsync, runtime async, état du navigateur
+- [docs/api-web.md](docs/api-web.md) : WebGL, mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
 - [docs/portail.md](docs/portail.md) : le futur site qui regroupera les jeux
 

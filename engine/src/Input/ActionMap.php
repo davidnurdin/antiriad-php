@@ -8,10 +8,10 @@ namespace JumPHP\Input;
  *
  *   actions:
  *     left:  [Left, A, pad0:left, touch:left]
- *     jump:  [Space, Up, pad0:button0, touch:tap]
+ *     jump:  [Space, Up, pad0:a, touch:tap]
  *
  * Key names are SDL key names (SDL_GetKeyFromName): Left, Right, Up, Down, Space, Return, Escape,
- * Backspace, Tab, Left Shift, A..Z, 0..9, F1..F12, Keypad 8 ... Other sources: padN:buttonM,
+ * Backspace, Tab, Left Shift, A..Z, 0..9, F1..F12, Keypad 8 ... Other sources: padN:a|b|x|y|start... (Gamepad), padN:buttonM,
  * padN:left|right|up|down, touch:left|right|up|down|tap, mouse:1|2|3.
  *
  * Bots, demos and the network can drive actions too: hold('p2_up', true), press('confirm').

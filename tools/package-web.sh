@@ -31,7 +31,11 @@ cat > version.json <<JSON
   "php-web.mjs": "$(hash php-web.mjs)",
   "php-web.wasm": "$(hash php-web.wasm)",
   "php-web.data": "$(hash php-web.data)",
-  "jumphp-worker.js": "$(hash jumphp-worker.js)"
+$(for f in jumphp-*.js; do printf '  "%s": "%s",\n' "$f" "$(hash "$f")"; done)
+  "touch.js": "$(hash touch.js)",
+  "php-wasm-network.js": "$(hash php-wasm-network.js)"
 }
 JSON
+# offline cache (game.yaml pwa): a new build = a new service worker
+[ -f sw.js ] && sed -i "s/__JUMPHP_BUILD__/$(hash version.json)/" sw.js
 ls -la "$OUT"

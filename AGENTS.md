@@ -34,10 +34,14 @@ engine/                 the framework: composer package jumphp/engine, namespace
   src/Net/              NetSession, LobbyScene, MessageCodec, SnapshotBuffer
   src/Save/             Storage, Options
   src/Async/            Tasks, Pool, Task, TaskFailed, WebWorkers, Worker (threads / Web Workers / between frames)
-  src/Bridge/           JsBridge (game -> web page)
+  src/Bridge/           JsBridge (game <-> web page, synchronous with the frames)
+  src/Device/           Lifecycle (hide/show/blur/close...), Device (phone features), Pwa (installable, offline)
+  src/Gl/               WebGl (shaders, 3D layer, post-processing in the browser), Mat4
+  src/Http/             Http (async requests: fetch / curl / sockets), HttpResponse, HttpError
   src/Util/             Color, Math, Time, Lang, Vector
   bootstrap/wasm.php    browser entry point
-  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js)
+  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js, jumphp-gl.js,
+                        jumphp-device.js, jumphp-http.js, jumphp-pwa.js, jumphp-gamepad.js, sw.js)
   stubs/sdl.stub.php    signatures of every SDL function / constant / class (read it to know the raw API)
   stubs/async.stub.php  the TrueAsync API used by JumPHP\Async
   tests/                engine unit tests
@@ -80,8 +84,9 @@ games/<id>/
    - no colour integers like `0xFF000000`: use `[r, g, b, a]` arrays, `'#rrggbb'` strings or `Color`.
    - no `pack('q'/'J'/'P')`: use `C c v s V g` (see MessageCodec).
    - big counters (score > 2 billion) are floats.
-4. **Network only through `JumPHP\Net`** (`$this->engine->net()`). No `socket_*`, `fsockopen`,
-   `stream_socket_client`, curl or `file_get_contents('http...')`: they do not exist in the browser.
+4. **Network only through `JumPHP\Net`** (`$this->engine->net()`, multiplayer) and **`JumPHP\Http`**
+   (`$this->engine->http()`, web APIs). No `socket_*`, `fsockopen`, `stream_socket_client`, curl or
+   `file_get_contents('http...')`: they do not exist in the browser (and they block the frame).
 5. **Files**: read game files with paths relative to the game root through `$this->engine->config->path('assets/...')`
    (or relative paths given to Sdl / SoundManager / loaders, which resolve them). Write only into `var/`
    through `$this->engine->storage` / `$this->engine->options` (persisted in IndexedDB in the browser).
@@ -142,7 +147,7 @@ Three key-name formats, do not mix them:
 
 | Where | Format | Examples |
 |---|---|---|
-| `config/input.yaml` | SDL key names, `padN:`, `touch:`, `mouse:` | `Left`, `Space`, `Return`, `Left Shift`, `pad0:button0` |
+| `config/input.yaml` | SDL key names, `padN:`, `touch:`, `mouse:` | `Left`, `Space`, `Return`, `Left Shift`, `pad0:a`, `pad0:start` |
 | `JUMPHP_INPUT` (headless) | **action names** from input.yaml | `confirm`, `left`, `fire` |
 | `bin/jumphp webshot` keys | browser `KeyboardEvent.key` names | `Enter`, `ArrowLeft`, ` ` (space), `Escape`, `a` |
 
@@ -189,6 +194,9 @@ Replace its scenes and entities with your game:
    | `touch` | | phone pad keys: `{a: Space, b: Escape, start: Return}`; optional `pad: stick` (floating joystick, 8 directions), `select: P` (4th button), `labels: {a: JUMP, ..., rotate: TEXT}`; phones go fullscreen + landscape at the first tap (`fullscreen: false` to disable) |
    | `controls` | | one line of help text shown by the web page / portal |
    | `runtime` | default | `async`: desktop runs on PHP 8.6 ZTS + TrueAsync (real threads, §9 Threads) |
+   | `pause_scene` | | pushed when the tab is hidden / the window loses the focus (not over menus) |
+   | `pause_on_blur`, `mute_when_hidden` | true, true | |
+   | `pwa` | false | `true` or `{name, short_name, display, orientation, theme_color, background_color}`: installable, plays offline (§9) |
    | `debug_key`, `fullscreen_key` | F3, F11 | |
 2. **`config/input.yaml`**: your actions (`jump`, `fire`, `p1_up`...). The engine already defines
    `up down left right confirm back pause`.
@@ -488,8 +496,17 @@ Steady physics: `FixedStep` — `$this->step = new FixedStep(120); $this->step->
 `press($action)` (bots, demos). Raw: `$this->engine->input->getKeyboard()->isKeyHeld(\SDLK_x)`,
 `getMouse()->x/y/isHeld(1)` (view coordinates), `getTouch()->active/x/y` (0..1 of the screen),
 `getGamepad()`. config/input.yaml binding names: SDL key names (`Left`, `Space`, `Return`, `Escape`,
-`Left Shift`, `A`..`Z`, `0`..`9`, `F1`..`F12`, `Keypad 8`), `pad0:button0`, `pad0:left`, `touch:tap`,
+`Left Shift`, `A`..`Z`, `0`..`9`, `F1`..`F12`, `Keypad 8`), gamepad names (below), `touch:tap`,
 `touch:left`, `mouse:1`. Global keys: F3 debug overlay, F11 fullscreen (desktop).
+
+**Gamepads** (`$this->engine->input->getGamepad()`): the same names on every pad and target (W3C "standard"
+layout, Xbox names): `pad0:a b x y lb rb lt rt select start home ls rs up down left right`, stick directions
+`pad0:ls_left`... `pad0:rs_down` (`pad0:left` = d-pad OR left stick), raw `pad0:button3`. Defaults:
+confirm = `pad0:a`, back = `pad0:b`, pause = `pad0:start`. Analog: `axis(0, 'lx')` (-1..1, dead zone
+applied; `lx ly rx ry`, triggers `lt rt` 0..1), `isButtonHeld(0, 'a')`, `count()`, `name(0)`, `isConnected(1)`,
+`rumble(0, $strong, $weak, $seconds)` (browser), events `connect` / `disconnect`. Browser: Gamepad API.
+Desktop: SDL joystick events with an Xbox / PlayStation table (no hat events in the binding: a d-pad seen as
+a hat is invisible there, the left stick works).
 In the browser, phones get an on-screen pad (arrows + A/B/START buttons; set their keys in
 `game.yaml touch: {a: Space, b: Escape, start: Return}`).
 
@@ -580,8 +597,48 @@ procedural pictures) off the main thread, so the frame never waits.
   too, but only `JumPHP\Async` also works in the browser. Browser jobs can not share memory with the game
   (each worker is a separate PHP): no global state survives between jobs on purpose.
 
+**HTTP** (`$this->engine->http()`, never blocks): `get($url, $headers)`, `post($url, $body)` (array = JSON),
+`request($method, $url, $body, $headers, $timeout)` return a `Task`:
+`->then(fn (HttpResponse $r) => ..., fn (\Throwable $e) => ...)`. Any status settles it (`$r->status`, `ok()`,
+`json()`, `header('content-type')`, `body`); `HttpError` = no answer (network, timeout, CORS). Browser:
+`fetch()` (the server must allow CORS); desktop: curl_multi, or non-blocking sockets (async runtime).
+
+**Page / window life** (`$this->engine->lifecycle()`, same events on both targets): `hide` / `show` (tab
+hidden, app in background / window minimized), `blur` / `focus`, `online` / `offline`, `resize` (w, h),
+`orientation` ('landscape'|'portrait'), `fullscreen` (bool), `close` (page closing / game quitting: save NOW).
+`hide` and `close` run at once in the browser, between frames, and var/ is written to IndexedDB right after.
+Getters `isVisible()`, `hasFocus()`, `isOnline()`, `orientation()`, `size()`. game.yaml `pause_scene` pushes
+your pause menu automatically; the sound is muted while hidden.
+
+**Phone features** (`$this->engine->device()`; what a device lacks does nothing): `vibrate(40)` / `vibrate([30,
+20, 30])`, `keepAwake()` (Wake Lock; desktop: no screen saver), `lockOrientation('landscape')`,
+`setFullscreen(true)` (at the next tap if the browser wants a gesture), `copy($text)` (clipboard),
+`share($text, $url)`, `enableMotion()` then `tilt()` ([x, y] -1..1) / `motion()` (m/s²), `battery()`,
+`isMobile()`, `isStandalone()`.
+
+**WebGL** (`$this->engine->gl()`, browser; `isAvailable()` false on desktop: draw a 2D fallback, `Mat4::project()`
+does software 3D): a canvas over the game composes the SDL picture with a 3D layer and an optional
+post-processing shader. `setLayer('below'|'above', 'view'|'native', $keyColour)` (below: the 3D shows where the
+2D is the key colour, e.g. clear with `[255, 0, 255]` and draw the HUD), resources once in `enter()`:
+`program($vsGlsl, $fsGlsl)`, `buffer($floats)`, `indexBuffer($ints)`, `texture('assets/x.png')`,
+`textureFromRgba($w, $h, $bytes)`; each frame in `render()`: `clear($colour)`,
+`draw($program, ['attributes' => ['a_pos' => [$buffer, 3, $stride, $offset]], 'uniforms' => ['u_mvp' => Mat4::...],
+'textures' => ['u_tex' => $id], 'cull' => 'back'])`. `setPostShader('void main() { gl_FragColor =
+texture2D(u_frame, v_uv); }')` (inputs: `u_frame`, `v_uv`, `u_time`, `u_resolution`, `u_viewport`, `u_view`),
+`setUniform()`, `disable()` in `exit()`. GLSL ES 1.00 (WebGL 1); colours 0..255 like everywhere, GLSL uniforms
+0..1. Compile errors: `on('error')` + console. See `games/hello-webgl`.
+
+**PWA** (`$this->engine->pwa()`, game.yaml `pwa: true`): the build adds manifest, icons (from
+`assets/icon.png`, else the title's initial) and a service worker caching the whole build: installable, plays
+offline (https or localhost). `canInstall()` / `install()` (Task: true when accepted; put it in a menu),
+`isInstalled()`, `isOfflineReady()`, `updateReady()` / `applyUpdate()` (reloads into the newer build), events
+`installable`, `installed`, `offline`, `update`.
+
 **Web page** (`$this->engine->bridge->send('open', ['url' => ...])`, `send('quit')`, `send('share', [...])`;
 custom types reach `window.JumPHP.onBridge(msg)` and the parent frame as `postMessage({type: 'jumphp:bridge'})`).
+Page -> game: `window.JumPHP.send('hello', {...})` in the page, `$this->engine->bridge->on('hello', fn (array $d) => ...)`
+in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')` runs PHP between frames
+(debugging, browser tests).
 `Platform::isWasm()`, `isDesktop()`, `isMobile()`. `$this->engine->quit()`: desktop closes, browser goes to
 `?back=` or shows "thanks for playing".
 
@@ -613,6 +670,9 @@ custom types reach `window.JumPHP.onBridge(msg)` and the parent frame as `postMe
 | Browser: "The game did not start" | open the console (webshot prints it): PHP boot error with file and line |
 | `bin/jumphp install` fails fetching `php-wasm-network` | the first install clones it from GitHub (network needed once); later installs use the composer cache |
 | Composer package needs an extension | not possible in the browser: pure PHP only |
+| WebGL: nothing in 3D, console `[webgl] ...` | a shader error (also `$gl->on('error')`); draw every frame in `render()`; `setLayer()` and the key colour cleared in the 2D |
+| `HttpError ... network error or CORS` in the browser only | the server must send `Access-Control-Allow-Origin` (fetch from a web page) |
+| PWA not installable / not offline | game.yaml `pwa`, https (or localhost), rebuild; the first visit fills the cache (`isOfflineReady()`) |
 | `Class "App\..." not found` inside a thread | the thread only has the autoloader: use `JumPHP\Async` (it loads `vendor/autoload.php` there), not raw `Async\spawn_thread` without a bootloader |
 | `LogicException ... must be a static closure` | write `static fn () => ...` (or a static method) for work sent to `thread()` / `submit()` |
 | `ThreadTransferException`, `Cannot transfer a resource between threads` | a reference, a resource or an object with dynamic properties was sent to a thread (as an argument or a captured `use` variable): plain values only |
@@ -622,6 +682,8 @@ custom types reach `window.JumPHP.onBridge(msg)` and the parent frame as `postMe
 
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
+- `games/hello-webgl/` — WebGL: 3D cubes under a 2D HUD, post-processing shaders, software 3D on desktop,
+  gamepad sticks / rumble, automatic pause (lifecycle), PWA (installable, offline).
 - `skeleton/` — platformer: tiles, slopes, one-way platforms, camera, coins, sprite from pixel strings.
 - `engine/stubs/sdl.stub.php` — every raw SDL / SDL_image / SDL_mixer / SDL_ttf function and constant.
 - `engine/tests/` — usage examples of CollisionSystem, TiledJsonLoader, SceneManager, Menu, Net.

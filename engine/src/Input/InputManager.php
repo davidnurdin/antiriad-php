@@ -7,7 +7,8 @@ use JumPHP\Renderer\Renderer;
 
 /**
  * Drains the SDL event queue once per frame and feeds keyboard, mouse, touch and gamepads.
- * Events: 'quit' (window closed), 'key' (int $sym, on key down), 'resize' (int $w, int $h).
+ * Events: 'quit' (window closed), 'key' (int $sym, on key down), 'resize' (int $w, int $h),
+ * 'window' (int SDL_WINDOWEVENT_*, int $data1, int $data2).
  */
 class InputManager extends EventEmitter
 {
@@ -70,13 +71,24 @@ class InputManager extends EventEmitter
                 case 0x605: // SDL_JOYDEVICEADDED (no constant in the binding)
                     $this->gamepad->open();
                     break;
+                case 0x606: // SDL_JOYDEVICEREMOVED: no data in the binding's event, close them all and reopen
+                    for ($i = $this->gamepad->count() - 1; $i >= 0; $i--) {
+                        $this->gamepad->close($i);
+                    }
+                    $this->gamepad->open();
+                    break;
                 case \SDL_WINDOWEVENT:
-                    if ($event->window !== null && $event->window->event === \SDL_WINDOWEVENT_SIZE_CHANGED) {
-                        $this->emit('resize', [$event->window->data1, $event->window->data2]);
+                    if ($event->window !== null) {
+                        $w = $event->window;
+                        $this->emit('window', [(int)$w->event, (int)$w->data1, (int)$w->data2]);
+                        if ($w->event === \SDL_WINDOWEVENT_SIZE_CHANGED) {
+                            $this->emit('resize', [$w->data1, $w->data2]);
+                        }
                     }
                     break;
             }
         }
+        $this->gamepad->update();
     }
 
     /**

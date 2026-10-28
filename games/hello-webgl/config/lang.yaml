@@ -1,0 +1,9 @@
+# Translations: the menus translate their labels and titles.
+fr:
+  'START': 'JOUER'
+  'QUIT': 'QUITTER'
+  'PAUSE': 'PAUSE'
+  'RESUME': 'REPRENDRE'
+  'TITLE SCREEN': 'ECRAN TITRE'
+  'INSTALL': 'INSTALLER'
+  'UPDATE': 'METTRE A JOUR'

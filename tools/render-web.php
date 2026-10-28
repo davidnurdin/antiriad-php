@@ -9,8 +9,8 @@ $config = JumPHP\Kernel\GameConfig::load($game)->all();
 $engineInfo = is_file("$engineDir/engine.json") ? json_decode(file_get_contents("$engineDir/engine.json"), true) : [];
 $hash = fn (string $file) => is_file($file) ? substr(hash_file('sha256', $file), 0, 12) : '0';
 
-foreach (['jumphp.js', 'jumphp-worker.js', 'touch.js'] as $js) {
-    copy("$webDir/$js", "$out/$js");
+foreach (glob("$webDir/*.js") as $js) {
+    copy($js, "$out/" . basename($js));
 }
 $icon = 'data:,';
 foreach (['icon.png', 'thumbnail.png'] as $image) {
@@ -38,9 +38,78 @@ $manifest = [
     'engine' => ['name' => 'JumPHP', 'php' => $engineInfo['php'] ?? '8.3', 'network' => $engineInfo['network'] ?? null],
     'built' => gmdate('c'),
 ];
+if (is_array($config['pwa'] ?? false) || ($config['pwa'] ?? false) === true) {
+    $manifest['pwa'] = true;
+}
 file_put_contents("$out/game.json", json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
 
 $h = fn (string $s) => htmlspecialchars($s, ENT_QUOTES);
+
+// PWA (game.yaml `pwa: true` or {name, short_name, display, orientation, theme_color, background_color}):
+// manifest.webmanifest, icons 192 / 512 (assets/icon.png scaled in big pixels, else the title's initial),
+// sw.js (the offline cache; tools/package-web.sh writes its build id)
+$pwaHead = '';
+$pwa = $config['pwa'] ?? false;
+if ($pwa === true) {
+    $pwa = [];
+}
+if (is_array($pwa)) {
+    $hex = fn (array|string $c) => is_string($c) ? $c : sprintf('#%02x%02x%02x', ...array_slice(array_map('intval', $c), 0, 3));
+    $background = $hex($pwa['background_color'] ?? $config['background'] ?? [0, 0, 0]);
+    $theme = $hex($pwa['theme_color'] ?? '#000000');
+    foreach ([192, 512] as $size) {
+        imagepng(pwaIcon($game, $config, $size, $background), "$out/icon-$size.png");
+    }
+    $orientation = $pwa['orientation'] ?? ((int)$config['width'] >= (int)$config['height'] ? 'landscape' : 'portrait');
+    $webManifest = [
+        'id' => './',
+        'name' => $pwa['name'] ?? $config['title'],
+        'short_name' => $pwa['short_name'] ?? mb_substr((string)$config['title'], 0, 12),
+        'description' => $config['description'],
+        'start_url' => './',
+        'scope' => './',
+        'display' => $pwa['display'] ?? 'fullscreen',
+        'orientation' => $orientation,
+        'background_color' => $background,
+        'theme_color' => $theme,
+        'icons' => [
+            ['src' => 'icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+            ['src' => 'icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ],
+        'categories' => ['games'],
+    ];
+    file_put_contents("$out/manifest.webmanifest", json_encode($webManifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+    file_put_contents("$out/sw.js", str_replace('__JUMPHP_GAME__', preg_replace('/[^a-z0-9-]/', '', (string)$config['id']), file_get_contents("$webDir/sw.js")));
+    $pwaHead = '<link rel="manifest" href="manifest.webmanifest" />' . "\n\t" . '<link rel="apple-touch-icon" href="icon-192.png" />'
+        . "\n\t" . '<meta name="apple-mobile-web-app-status-bar-style" content="black" />';
+    if ($icon === 'data:,') {
+        $icon = 'icon-192.png';
+    }
+} else {
+    @unlink("$out/sw.js");
+}
+
+/** A square icon: assets/icon.png scaled up (nearest) on the background, else the title's first letter. */
+function pwaIcon(string $game, array $config, int $size, string $background): GdImage
+{
+    $image = imagecreatetruecolor($size, $size);
+    [$r, $g, $b] = sscanf(strlen($background) === 4 ? '#' . str_repeat($background[1], 2) . str_repeat($background[2], 2) . str_repeat($background[3], 2) : $background, '#%02x%02x%02x');
+    imagefill($image, 0, 0, imagecolorallocate($image, $r, $g, $b));
+    $source = is_file("$game/assets/icon.png") ? @imagecreatefrompng("$game/assets/icon.png") : false;
+    if ($source === false) {
+        // the initial in GD's built-in font (5 x 8), scaled up: a pixel-art letter
+        $letter = imagecreatetruecolor(8, 10);
+        imagefill($letter, 0, 0, imagecolorallocate($letter, $r, $g, $b));
+        imagestring($letter, 1, 2, 1, strtoupper(substr(trim((string)$config['title']), 0, 1)) ?: 'J', imagecolorallocate($letter, 255, 210, 63));
+        $source = $letter;
+    }
+    // inside the safe zone of maskable icons (80 %), whole scale factors
+    $sw = imagesx($source);
+    $sh = imagesy($source);
+    $scale = max(1, (int)floor($size * 0.7 / max($sw, $sh)));
+    imagecopyresized($image, $source, intdiv($size - $sw * $scale, 2), intdiv($size - $sh * $scale, 2), 0, 0, $sw * $scale, $sh * $scale, $sw, $sh);
+    return $image;
+}
 $html = strtr(file_get_contents("$webDir/index.html"), [
     '{{TITLE}}' => $h($config['title']),
     '{{DESCRIPTION}}' => $h($config['description']),
@@ -48,6 +117,7 @@ $html = strtr(file_get_contents("$webDir/index.html"), [
     '{{WIDTH}}' => (string)(int)$config['width'],
     '{{HEIGHT}}' => (string)(int)$config['height'],
     '{{ICON}}' => $icon,
+    '{{PWA_HEAD}}' => $pwaHead,
     '{{ENGINE_VERSION}}' => $h($engineInfo['php'] ?? ''),
     '{{WASM_SIZE}}' => (string)(is_file("$engineDir/php-web.wasm") ? filesize("$engineDir/php-web.wasm") : 0),
     '{{GAME_JSON}}' => json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP),

@@ -117,6 +117,22 @@ final class Application
         }
     }
 
+    /**
+     * Browser, between two frames: the page's events now (called by jumphp_events(): the tab is being hidden
+     * or closed and may not run another frame; a 'hide' / 'close' listener can still save).
+     */
+    public function events(): void
+    {
+        if ($this->crash !== null || !$this->engine->isRunning()) {
+            return;
+        }
+        try {
+            $this->engine->bridge->poll();
+        } catch (\Throwable $e) {
+            $this->crashed($e);
+        }
+    }
+
     /** Desktop: runs until the game quits. @return int exit code */
     public function run(): int
     {

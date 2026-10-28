@@ -41,7 +41,7 @@ engine/                 the framework: composer package jumphp/engine, namespace
   src/Http/             Http (async requests: fetch / curl / sockets), HttpResponse, HttpError
   src/Util/             Color, Math, Time, Lang, Vector
   bootstrap/wasm.php    browser entry point
-  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js,
+  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, jumphp-files.js (remote games), touch.js,
                         jumphp-device.js, jumphp-http.js, jumphp-pwa.js, jumphp-gamepad.js, sw.js)
   stubs/sdl.stub.php    signatures of every SDL function / constant / class (read it to know the raw API)
   stubs/async.stub.php  the TrueAsync API used by JumPHP\Async
@@ -127,6 +127,8 @@ games/<id>/
 | `bin/jumphp test <id>` | `php -l`, phpstan (level 5, if `phpstan.neon` and `bin/jumphp test engine` ran once), phpunit (`tests/` if any), **headless smoke test** (600 frames, any PHP warning = failure) |
 | `bin/jumphp shot <id> [frames] [out.png]` | **headless screenshot**: runs N frames (default 120) and saves a PNG in `games/<id>/var/screenshots/` — open it to SEE the game |
 | `bin/jumphp build <id>` | browser build → `games/<id>/dist/web/` (static files) |
+| `bin/jumphp build:remote <id>` | the game as a **remote game** (`dist/remote/`: shared engine + files one by one + manifest, what a games site serves, docs/remote.md); `JUMPHP_WEB=remote bin/jumphp serve/webshot <id>` tries it |
+| `bin/jumphp runtime:build` / `runtime:download [version]` | the shared engine of remote games → `build/runtime/` (+ the release asset `.build/jumphp-runtime.tar.gz`) |
 | `bin/jumphp serve <id> [port]` | serves the browser build on http://localhost:8080 |
 | `bin/jumphp webshot <id> [seconds] [keys]` | headless Chrome: loads the browser build, presses keys, screenshot `dist/webshot.png`, fails on JS / PHP errors |
 | `bin/jumphp relay up\|down\|logs` | multiplayer relay server on `ws://localhost:8090/ws` |

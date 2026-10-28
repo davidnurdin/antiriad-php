@@ -13,7 +13,7 @@ rm -rf "$STAGE" "$WEB"
 mkdir -p "$STAGE" "$WEB"
 tar -C "$GAME_DIR" \
     --exclude=./vendor --exclude=./dist --exclude=./.build --exclude=./var --exclude=./cache \
-    --exclude=./tests --exclude=./phpstan.neon --exclude='./core' --exclude='./core.[0-9]*' --exclude='./.git*' -cf - . | tar -C "$STAGE" -xf -
+    --exclude=./tests --exclude=./site --exclude=./phpstan.neon --exclude='./core' --exclude='./core.[0-9]*' --exclude='./.git*' -cf - . | tar -C "$STAGE" -xf -
 mkdir -p "$STAGE/var"
 
 cd "$STAGE"

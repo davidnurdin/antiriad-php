@@ -15,7 +15,7 @@ let ccall = null;
 let FS = null;
 const errors = [];
 
-async function boot({ moduleUrl, dataUrl, wasmBinary }) {
+async function boot({ moduleUrl, dataUrl, wasmBinary, remote }) {
 	const { default: createPhpModule } = await import(moduleUrl);
 	const module = await createPhpModule({
 		wasmBinary,
@@ -30,6 +30,11 @@ async function boot({ moduleUrl, dataUrl, wasmBinary }) {
 	});
 	ccall = module.ccall;
 	FS = module.FS;
+	if (remote) {
+		// a remote game (jumphp-files.js): the same engine and game files as the page, from the caches it filled
+		const { installRemote } = await import(new URL('jumphp-files.js' + (remote.version['jumphp-files.js'] ? `?v=${remote.version['jumphp-files.js']}` : ''), remote.engine).href);
+		await installRemote({ FS, ...remote });
+	}
 	FS.mkdirTree('/tmp/job');
 	ccall('php_embed_init', 'number', ['number', 'number'], [0, 0]);
 	php(`define('JUMPHP_WASM', true); define('JUMPHP_WORKER', true); chdir('/game'); require '/game/vendor/autoload.php';`);

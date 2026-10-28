@@ -12,7 +12,12 @@
 // window.JumPHP.send(type, data) sends a custom event to the game: $engine->bridge->on(type, fn (array $data)).
 // Embedding (games portal): the page posts {type: 'jumphp:ready' | 'jumphp:quit' | 'jumphp:bridge', ...}
 // to window.parent; window.JumPHP.onBridge(message) receives the game's custom JsBridge messages.
+// Remote games (a games site, docs/remote.md): window.JUMPHP_GAME.remote = {manifest: 'manifest.json'}: the
+// engine comes from the folder of this script (shared by every game of the site, cached once), the game's
+// files one by one from the manifest (jumphp-files.js). Without it: the normal build (php-web.data).
 const GAME = window.JUMPHP_GAME || {};
+const REMOTE = GAME.remote || null;
+const ENGINE = new URL('./', import.meta.url).href;     // a normal build: the folder of the page
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas');
@@ -105,19 +110,21 @@ const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => res
 const notifyParent = (message) => { if (window.parent !== window) window.parent.postMessage(message, '*'); };
 
 // version.json (always fetched fresh): content hashes, so a new build is never hidden by an old cache
-const version = await fetch('version.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+const version = await fetch(new URL('version.json', ENGINE), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
 const versioned = (file) => (version[file] ? `${file}?v=${version[file]}` : file);
+const engineUrl = (file) => new URL(versioned(file), ENGINE).href;
 
 async function cachedFetch(url) {
 	let cache = null;
-	try { cache = await caches.open('jumphp-' + (GAME.id || 'game')); } catch (e) { /* private mode, http */ }
+	// remote games share one engine: one cache for all of them
+	try { cache = await caches.open(REMOTE ? 'jumphp-engine' : 'jumphp-' + (GAME.id || 'game')); } catch (e) { /* private mode, http */ }
 	const hit = cache && await cache.match(url).catch(() => null);
 	if (hit) return hit;
 	const response = await fetch(url);
 	if (cache && response.ok && url.includes('?v=')) {
 		try {
-			const file = url.split('?')[0];
-			for (const old of await cache.keys()) if (new URL(old.url).pathname.endsWith('/' + file)) await cache.delete(old);
+			const path = new URL(url, location.href).pathname;
+			for (const old of await cache.keys()) if (new URL(old.url).pathname === path) await cache.delete(old);
 			await cache.put(url, response.clone());
 		} catch (e) { console.warn('[cache]', e); }
 	}
@@ -199,7 +206,7 @@ function pollBridge(FS) {
 // JumPHP\Async in the browser: a pool of Web Workers, each with its own PHP engine (jumphp-worker.js), started
 // with the first job. PHP writes jobs to TASKS_DIR/out/<id>.job, results come back as TASKS_DIR/in/<id>.res
 // (or .err); TASKS_DIR/disabled tells PHP to run the work itself (no worker could start).
-function startTasks(FS, wasmBinary) {
+function startTasks(FS, wasmBinary, remote) {
 	const slots = [];
 	let disabled = false;
 	const put = (name, data) => {
@@ -217,7 +224,7 @@ function startTasks(FS, wasmBinary) {
 	const spawn = (slot) => {
 		slot.ready = false;
 		slot.job = null;
-		const worker = slot.worker = new Worker(versioned('jumphp-worker.js'), { type: 'module' });
+		const worker = slot.worker = new Worker(engineUrl('jumphp-worker.js'), { type: 'module' });
 		const dead = (why) => {
 			worker.terminate();
 			if (slot.job) put(`${slot.job}.err`, why);
@@ -234,9 +241,10 @@ function startTasks(FS, wasmBinary) {
 		worker.onerror = (e) => { e.preventDefault(); dead(e.message || 'worker error'); };
 		worker.postMessage({
 			type: 'boot',
-			moduleUrl: new URL(versioned('php-web.mjs'), location.href).href,
+			moduleUrl: engineUrl('php-web.mjs'),
 			dataUrl: new URL(versioned('php-web.data'), location.href).href,
 			wasmBinary,
+			remote,
 		});
 	};
 	const pump = () => {
@@ -277,10 +285,12 @@ async function loadModules() {
 }
 
 async function main() {
-	const { default: createPhpModule } = await import('./' + versioned('php-web.mjs'));
+	const { default: createPhpModule } = await import(engineUrl('php-web.mjs'));
+	const manifestUrl = REMOTE ? new URL(REMOTE.manifest || 'manifest.json', location.href).href : null;
+	const manifest = REMOTE ? import(engineUrl('jumphp-files.js')).then((files) => files.fetchManifest(manifestUrl)) : null;
 
 	setStatus('Downloading the engine...');
-	const wasmBinary = await fetchWithProgress(versioned('php-web.wasm'), (r) => setProgress(r * 0.45));
+	const wasmBinary = await fetchWithProgress(engineUrl('php-web.wasm'), (r) => setProgress(r * 0.45));
 
 	setStatus('Loading the game...');
 	const { ccall, FS } = await createPhpModule({
@@ -312,6 +322,12 @@ async function main() {
 	});
 	window.JumPHP.FS = FS;
 	FSref = FS;
+	let remote = null;
+	if (REMOTE) {
+		remote = { engine: ENGINE, version, manifest: await manifest, manifestUrl };
+		const { installRemote } = await import(engineUrl('jumphp-files.js'));
+		await installRemote({ FS, ...remote, onProgress: (r) => setProgress(0.45 + 0.45 * r) });
+	}
 	callPhp = (code) => ccall('zend_eval_string', 'number', ['string', 'number', 'string'], [code, 0, 'jumphp events']);
 	// debugging / tests: PHP code between two frames (its echo goes to the console)
 	window.JumPHP.php = (code) => { if (booted) callPhp(code); };
@@ -355,7 +371,7 @@ async function main() {
 	booted = true;
 	await nextFrame();
 	loader.style.display = 'none';
-	startTasks(FS, wasmBinary);
+	startTasks(FS, wasmBinary, remote);
 	window.JumPHPTouch?.start();
 	notifyParent({ type: 'jumphp:ready', game: GAME.id });
 

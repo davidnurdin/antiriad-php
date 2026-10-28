@@ -35,6 +35,9 @@ Setup
   engine:download [version] download the prebuilt WebAssembly engine of this version (GitHub release)
   engine:build              build the WebAssembly engine (PHP + SDL -> build/engine, ~25 min once, cached)
   engine:pack               build/engine -> .build/jumphp-engine.tar.gz (+ .sha256), the release asset
+  runtime:build             the shared engine of remote games (a games site) -> build/runtime
+                            + .build/jumphp-runtime.tar.gz (+ .sha256), the release asset (docs/remote.md)
+  runtime:download [version]  download it from the GitHub release instead
   update                    merge the newest JumPHP (git remote "jumphp") into the project
   doctor                    check docker, display, sound
 
@@ -46,9 +49,11 @@ Games (<game> = a folder of games/, e.g. pong)
   test <game>               lint + phpstan (if configured) + phpunit (if tests/) + headless smoke test
   shot <game> [frames] [out.png]   headless screenshot after N frames (default 120) -> var/screenshots/
   build <game>              browser build -> games/<game>/dist/web (static files)
+  build:remote <game>       the game as a remote game (shared engine, files one by one) -> dist/remote
   serve <game> [port]       serve the browser build on http://localhost:<port> (default 8080)
   webshot <game> [seconds] [keys]  headless Chrome: load the browser build, play keys, screenshot, fail on errors
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
+                            (serve / webshot: JUMPHP_WEB=remote uses dist/remote)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
   deploy [game...]          to your server (JUMPHP_SERVER in .env, see deploy:setup): browser builds + FrankenPHP
                             (alone or behind Traefik), docker compose up there. Default game: JUMPHP_GAME.
@@ -176,6 +181,35 @@ cmd_engine_pack() {
   ls -la "$ROOT/.build/jumphp-engine.tar.gz"*
 }
 
+# The shared engine of remote games (docs/remote.md): build/runtime, and its release asset.
+cmd_runtime_build() {
+  [ -f "$ENGINE_DIR/php-web.mjs" ] && [ -f "$ENGINE_DIR/php-web.wasm" ] || die "no engine in build/engine: bin/jumphp engine:download (or engine:build) first"
+  php_run . -- sh /workspace/tools/build-runtime.sh
+  mkdir -p "$ROOT/.build"
+  tar -czf "$ROOT/.build/jumphp-runtime.tar.gz" -C "$ROOT/build/runtime" .
+  (cd "$ROOT/.build" && { sha256sum jumphp-runtime.tar.gz 2>/dev/null || shasum -a 256 jumphp-runtime.tar.gz; } > jumphp-runtime.tar.gz.sha256)
+  say "done: build/runtime (+ .build/jumphp-runtime.tar.gz)"
+}
+
+cmd_runtime_download() {
+  local version="${1:-$(cat "$ROOT/VERSION" 2>/dev/null || echo latest)}"
+  local base="${REPO_URL%.git}/releases" url
+  if [ "$version" = latest ]; then url="$base/latest/download"; else url="$base/download/v${version#v}"; fi
+  local tmp; tmp="$(mktemp -d)"
+  say "downloading the runtime $version ($url/jumphp-runtime.tar.gz)"
+  curl -fL --progress-bar -o "$tmp/r.tar.gz" "$url/jumphp-runtime.tar.gz" \
+    && curl -fsSL -o "$tmp/r.sha256" "$url/jumphp-runtime.tar.gz.sha256" \
+    || { rm -rf "$tmp"; die "no runtime for $version: bin/jumphp runtime:build"; }
+  local want got
+  want="$(cut -d' ' -f1 < "$tmp/r.sha256")"
+  got="$( (sha256sum "$tmp/r.tar.gz" 2>/dev/null || shasum -a 256 "$tmp/r.tar.gz") | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$want" = "$got" ] || { rm -rf "$tmp"; die "checksum mismatch: the download is broken, try again"; }
+  rm -rf "$ROOT/build/runtime" && mkdir -p "$ROOT/build/runtime"
+  tar -xzf "$tmp/r.tar.gz" -C "$ROOT/build/runtime"
+  rm -rf "$tmp"
+  ls -la "$ROOT/build/runtime"
+}
+
 # The newest JumPHP merged into the project (a project made by composer create-project or bin/jumphp init
 # has the framework as git remote "jumphp"; a plain clone of JumPHP has it as origin).
 cmd_update() {
@@ -291,22 +325,33 @@ cmd_build() {
   say "done: $dir/dist/web ($(du -sh "$ROOT/$dir/dist/web" | cut -f1)). Try it: bin/jumphp serve $game"
 }
 
+# A remote game (docs/remote.md) in dist/remote: the runtime in engine/, the game's files, manifest, page.
+cmd_build_remote() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"
+  [ -f "$ROOT/build/runtime/version.json" ] || cmd_runtime_build
+  [ -f "$ROOT/$dir/vendor/autoload.php" ] || php_run "$dir" -- composer install --no-interaction
+  rm -rf "$ROOT/$dir/dist/remote"
+  php_run "$dir" -- php /workspace/tools/remote-manifest.php "/workspace/$dir" "/workspace/$dir/dist/remote" engine/ /workspace/build/runtime
+  cp -r "$ROOT/build/runtime" "$ROOT/$dir/dist/remote/engine"
+  say "done: $dir/dist/remote. Try it: JUMPHP_WEB=remote bin/jumphp serve $game"
+}
+
 cmd_serve() {
   local dir; dir="$(game_dir "${1:-}")"
-  local port="${2:-8080}"
-  [ -f "$ROOT/$dir/dist/web/index.html" ] || die "no browser build: bin/jumphp build ${1}"
+  local port="${2:-8080}" web="${JUMPHP_WEB:-web}"
+  [ -f "$ROOT/$dir/dist/$web/index.html" ] || die "no browser build: bin/jumphp build ${1}"
   say "http://localhost:$port/  (Ctrl+C to stop)"
-  docker run --rm $TTY_FLAGS -p "127.0.0.1:$port:80" -v "$ROOT/$dir/dist/web:/srv:ro" \
+  docker run --rm $TTY_FLAGS -p "127.0.0.1:$port:80" -v "$ROOT/$dir/dist/$web:/srv:ro" \
     -v "$ROOT/docker/web/Caddyfile:/etc/frankenphp/Caddyfile:ro" "$WEB_IMAGE"
 }
 
 cmd_webshot() {
   local game="${1:-}"; local dir; dir="$(game_dir "$game")"
-  local seconds="${2:-8}" keys="${3:-[]}"
-  [ -f "$ROOT/$dir/dist/web/index.html" ] || die "no browser build: bin/jumphp build $game"
+  local seconds="${2:-8}" keys="${3:-[]}" web="${JUMPHP_WEB:-web}"
+  [ -f "$ROOT/$dir/dist/$web/index.html" ] || die "no browser build: bin/jumphp build $game"
   local name="jumphp-webshot-$game" port="${JUMPHP_WEBSHOT_PORT:-18999}"
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker run -d --name "$name" -p "127.0.0.1:$port:80" -v "$ROOT/$dir/dist/web:/srv:ro" \
+  docker run -d --name "$name" -p "127.0.0.1:$port:80" -v "$ROOT/$dir/dist/$web:/srv:ro" \
     -v "$ROOT/docker/web/Caddyfile:/etc/frankenphp/Caddyfile:ro" "$WEB_IMAGE" >/dev/null
   trap 'docker rm -f "'"$name"'" >/dev/null 2>&1 || true' EXIT
   sleep 1
@@ -556,6 +601,8 @@ main() {
     update) cmd_update ;;
     engine:download) cmd_engine_download "$@" ;;
     engine:pack) cmd_engine_pack ;;
+    runtime:build) cmd_runtime_build ;;
+    runtime:download) cmd_runtime_download "$@" ;;
     setup) cmd_setup "$@" ;;
     engine:build) cmd_engine_build "$@" ;;
     new) cmd_new "$@" ;;
@@ -565,6 +612,7 @@ main() {
     test) cmd_test "$@" ;;
     shot) cmd_shot "$@" ;;
     build) cmd_build "$@" ;;
+    build:remote) cmd_build_remote "$@" ;;
     serve) cmd_serve "$@" ;;
     webshot) cmd_webshot "$@" ;;
     relay) cmd_relay "$@" ;;

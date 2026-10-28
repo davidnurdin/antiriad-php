@@ -118,6 +118,7 @@ $html = strtr(file_get_contents("$webDir/index.html"), [
     '{{HEIGHT}}' => (string)(int)$config['height'],
     '{{ICON}}' => $icon,
     '{{PWA_HEAD}}' => $pwaHead,
+    '{{ENGINE}}' => '',
     '{{ENGINE_VERSION}}' => $h($engineInfo['php'] ?? ''),
     '{{WASM_SIZE}}' => (string)(is_file("$engineDir/php-web.wasm") ? filesize("$engineDir/php-web.wasm") : 0),
     '{{GAME_JSON}}' => json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP),

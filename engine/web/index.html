@@ -44,9 +44,10 @@
 <div id="loader"><h1>{{TITLE}}</h1><div id="bar"><div></div></div><div id="status">Loading...</div></div>
 <div id="overlay"><h1>{{TITLE}}</h1><p>CLICK / TAP TO PLAY</p></div>
 
-<!-- networking for PHP (php-wasm-network): loaded before the engine, its wasmnet extension calls it -->
-<script src="php-wasm-network.js?v={{V_NET}}"></script>
-<script src="touch.js?v={{V_TOUCH}}"></script>
-<script type="module" src="jumphp.js?v={{V_JS}}"></script>
+<!-- networking for PHP (php-wasm-network): loaded before the engine, its wasmnet extension calls it.
+     {{ENGINE}}: empty for a normal build; the shared engine folder for a remote game (docs/remote.md) -->
+<script src="{{ENGINE}}php-wasm-network.js?v={{V_NET}}"></script>
+<script src="{{ENGINE}}touch.js?v={{V_TOUCH}}"></script>
+<script type="module" src="{{ENGINE}}jumphp.js?v={{V_JS}}"></script>
 </body>
 </html>

@@ -33,15 +33,18 @@ engine/                 the framework: composer package jumphp/engine, namespace
   src/Ui/               Menu, MenuScene, TextInput, Hud
   src/Net/              NetSession, LobbyScene, MessageCodec, SnapshotBuffer
   src/Save/             Storage, Options
+  src/Async/            Tasks, Pool, Task, TaskFailed, WebWorkers, Worker (threads / Web Workers / between frames)
   src/Bridge/           JsBridge (game -> web page)
   src/Util/             Color, Math, Time, Lang, Vector
   bootstrap/wasm.php    browser entry point
-  web/                  the web page template (index.html, jumphp.js, touch.js)
+  web/                  the web page template (index.html, jumphp.js, jumphp-worker.js, touch.js)
   stubs/sdl.stub.php    signatures of every SDL function / constant / class (read it to know the raw API)
+  stubs/async.stub.php  the TrueAsync API used by JumPHP\Async
   tests/                engine unit tests
 skeleton/               template of a game, copied by `bin/jumphp new`
 games/<id>/             the games (games/pong = the reference game: read it)
-docker/                 engine-wasm (WebAssembly build), desktop (runtime), relay (network server), web
+docker/                 engine-wasm (WebAssembly build), desktop (runtime), desktop-async (PHP 8.6 ZTS + TrueAsync),
+                        relay (network server), web (FrankenPHP)
 tools/                  build scripts used by bin/jumphp
 build/engine/           the compiled WebAssembly engine (bin/jumphp engine:build), shared by all games
 ```
@@ -103,7 +106,7 @@ games/<id>/
 
 | Command | What it does |
 |---|---|
-| `bin/jumphp setup` | builds the Docker images (desktop runtime, relay). Done automatically when missing. |
+| `bin/jumphp setup [async]` | builds the Docker images (desktop runtime, relay; `async`: also the PHP 8.6 ZTS + TrueAsync runtime, ~15 min). Done automatically when missing. |
 | `bin/jumphp engine:build` | builds the WebAssembly engine into `build/engine/` (~25 min the first time, cached). Needed once for browser builds. |
 | `bin/jumphp new <id> ["Title"]` | creates `games/<id>` from `skeleton/` (id: `a-z0-9-`) |
 | `bin/jumphp install <id>` | composer install of the game |
@@ -184,6 +187,7 @@ Replace its scenes and entities with your game:
    | `online` | false | the game has online play (shown by the portal) |
    | `touch` | | phone pad keys: `{a: Space, b: Escape, start: Return}`; optional `pad: stick` (floating joystick, 8 directions), `select: P` (4th button), `labels: {a: JUMP, ..., rotate: TEXT}`; phones go fullscreen + landscape at the first tap (`fullscreen: false` to disable) |
    | `controls` | | one line of help text shown by the web page / portal |
+   | `runtime` | default | `async`: desktop runs on PHP 8.6 ZTS + TrueAsync (real threads, §9 Threads) |
    | `debug_key`, `fullscreen_key` | F3, F11 | |
 2. **`config/input.yaml`**: your actions (`jump`, `fire`, `p1_up`...). The engine already defines
    `up down left right confirm back pause`.
@@ -531,6 +535,50 @@ Prefer counting `$dt` in the scene (timers keep running when the scene changes: 
    `JUMPHP_SCENE_PARAMS='{"next":"App\\Scene\\PlayScene","nextParams":{"mode":"online"},"auto":"quick"}'`,
    `JUMPHP_NET_URL=ws://127.0.0.1:8090/ws` and `--network host` (see docs/reseau.md).
 
+**Threads** (`JumPHP\Async`, `$this->engine->tasks()`): heavy work (level generation, path finding, AI,
+procedural pictures) off the main thread, so the frame never waits.
+
+- One API, three backends (`Tasks::backend()`):
+  - `'threads'`: desktop with the **async runtime** (`runtime: async` in `game.yaml`: `bin/jumphp` runs the
+    game on PHP 8.6 ZTS + [TrueAsync](https://true-async.github.io), `docker/desktop-async`);
+  - `'workers'`: **the browser**: a pool of Web Workers, each running its own PHP engine with the game's
+    files (`engine/web/jumphp-worker.js`; cores - 1, at most 4; `?workers=N` in the page URL, 0 = none);
+  - `'frames'`: default desktop runtime (PHP 8.3): jobs run on the main thread between frames,
+    `$tasks->budget` ms per frame (4 by default, at least one job). Also the fallback when no Web Worker
+    can start.
+  `Tasks::threaded()` is true for the first two. A game must be correct with all three.
+- API:
+  ```php
+  $task = $this->engine->tasks()->thread(static fn () => Maze::generate(64, 48, $seed));   // one job, one thread
+  $pool = $this->engine->tasks()->pool();            // one worker per core (Tasks::workers()); in enter()
+  $job = $pool->submit(static fn (int $y) => Fractal::row($y, 192), $y)                    // never blocks
+      ->then(fn (string $row) => $this->rows[$y] = $row, fn (\Throwable $e) => ...);      // main thread
+  $task->isDone(); $task->isOk(); $task->result(); $task->error();
+  $pool->close();                                    // in exit()
+  ```
+  The engine polls the tasks at the start of each frame (before the scenes update): `then()` callbacks run
+  there, on the main thread, so they may touch the scene.
+- **What crosses to a thread is a copy**, in a fresh PHP world that only has the game's autoloader
+  (`vendor/autoload.php`): no engine, no SDL, no scene, no container. In the browser the closure travels as
+  its source code + captured values (laravel/serializable-closure): its scope class (the class it is written
+  in, for `self::`) must be autoloadable, which scenes are. Use **`static fn`**: a closure written
+  in a method carries `$this` (the scene and its SDL resources) even if it does not use it, and is refused
+  with a `LogicException` in both modes. Pass plain values (int, float, string, arrays, simple objects); return
+  plain values. No references (`&$x`), no resources (files, textures, sounds), no objects with dynamic
+  properties. Put thread code in plain static classes (e.g. `src/Work/`, excluded from the container in
+  `config/services.yaml`).
+- An exception in a thread comes back as `JumPHP\Async\TaskFailed` (`->class`, message, file, line of the
+  original): `$task->error()`, or `result()` rethrows it.
+- Results only arrive between frames (TrueAsync reports finished threads while the desktop loop sleeps;
+  headless runs wait 1 ms per frame while tasks are pending; the page hands Web Worker results over once per
+  frame): never busy-loop on `isDone()`. A Web Worker needs ~0.5-1 s to boot its engine: create the pool early
+  (in `enter()`), it starts the workers at once.
+- Rows of an older request can arrive after a new one started: tag jobs (a generation counter) and ignore
+  stale results. Example: `games/hello-threads` (fractal by a thread pool, 60 FPS kept).
+- Raw TrueAsync (`Async\spawn`, coroutines, channels, `Async\ThreadChannel`) is available in the async runtime
+  too, but only `JumPHP\Async` also works in the browser. Browser jobs can not share memory with the game
+  (each worker is a separate PHP): no global state survives between jobs on purpose.
+
 **Web page** (`$this->engine->bridge->send('open', ['url' => ...])`, `send('quit')`, `send('share', [...])`;
 custom types reach `window.JumPHP.onBridge(msg)` and the parent frame as `postMessage({type: 'jumphp:bridge'})`).
 `Platform::isWasm()`, `isDesktop()`, `isMobile()`. `$this->engine->quit()`: desktop closes, browser goes to
@@ -564,10 +612,15 @@ custom types reach `window.JumPHP.onBridge(msg)` and the parent frame as `postMe
 | Browser: "The game did not start" | open the console (webshot prints it): PHP boot error with file and line |
 | `bin/jumphp install` fails fetching `php-wasm-network` | the first install clones it from GitHub (network needed once); later installs use the composer cache |
 | Composer package needs an extension | not possible in the browser: pure PHP only |
+| `Class "App\..." not found` inside a thread | the thread only has the autoloader: use `JumPHP\Async` (it loads `vendor/autoload.php` there), not raw `Async\spawn_thread` without a bootloader |
+| `LogicException ... must be a static closure` | write `static fn () => ...` (or a static method) for work sent to `thread()` / `submit()` |
+| `ThreadTransferException`, `Cannot transfer a resource between threads` | a reference, a resource or an object with dynamic properties was sent to a thread (as an argument or a captured `use` variable): plain values only |
+| The game freezes while threads work | a busy loop on `isDone()`, or raw `Async\ThreadPool::submit()` with a full queue: use `JumPHP\Async\Pool` (never blocks) |
 
 ## 12. Reference
 
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
+- `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
 - `skeleton/` — platformer: tiles, slopes, one-way platforms, camera, coins, sprite from pixel strings.
 - `engine/stubs/sdl.stub.php` — every raw SDL / SDL_image / SDL_mixer / SDL_ttf function and constant.
 - `engine/tests/` — usage examples of CollisionSystem, TiledJsonLoader, SceneManager, Menu, Net.

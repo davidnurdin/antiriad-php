@@ -3,7 +3,7 @@
 parameters:
     level: 5
     paths: [src]
-    scanFiles: [../../engine/stubs/sdl.stub.php]
+    scanFiles: [../../engine/stubs/sdl.stub.php, ../../engine/stubs/async.stub.php]
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         - identifier: trait.unused

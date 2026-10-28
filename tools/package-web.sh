@@ -30,7 +30,8 @@ cat > version.json <<JSON
   "build": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "php-web.mjs": "$(hash php-web.mjs)",
   "php-web.wasm": "$(hash php-web.wasm)",
-  "php-web.data": "$(hash php-web.data)"
+  "php-web.data": "$(hash php-web.data)",
+  "jumphp-worker.js": "$(hash jumphp-worker.js)"
 }
 JSON
 ls -la "$OUT"

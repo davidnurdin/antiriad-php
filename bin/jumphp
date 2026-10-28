@@ -8,6 +8,8 @@ cd "$ROOT"
 [ -f .env ] && set -a && . ./.env && set +a
 
 DESKTOP_IMAGE="${JUMPHP_DESKTOP_IMAGE:-jumphp/desktop:dev}"
+# runtime "async" (game.yaml `runtime: async`): PHP 8.6 ZTS + TrueAsync (threads, coroutines)
+ASYNC_IMAGE="${JUMPHP_ASYNC_IMAGE:-jumphp/desktop-async:dev}"
 EMSDK_IMAGE="${JUMPHP_EMSDK_IMAGE:-emscripten/emsdk:3.1.35}"
 WEB_IMAGE="${JUMPHP_WEB_IMAGE:-dunglas/frankenphp:1.12.7-alpine}"
 PUPPETEER_IMAGE="${JUMPHP_PUPPETEER_IMAGE:-ghcr.io/puppeteer/puppeteer:24.10.0}"
@@ -24,7 +26,7 @@ usage() {
 JumPHP - retro 2D games in PHP (SDL), desktop + browser. Everything runs in Docker.
 
 Setup
-  setup                     build the Docker images (desktop runtime, relay server)
+  setup [async]             build the Docker images (desktop runtime, relay server; async: PHP 8.6 ZTS + TrueAsync)
   engine:build              build the WebAssembly engine (PHP + SDL -> build/engine, ~25 min once, cached)
   doctor                    check docker, display, sound
 
@@ -61,6 +63,15 @@ game_dir() {
   echo "games/$g"
 }
 
+# runtime of a game folder: JUMPHP_RUNTIME, else `runtime:` in its config/game.yaml, else "default"
+game_runtime() {
+  if [ -n "${JUMPHP_RUNTIME:-}" ]; then echo "$JUMPHP_RUNTIME"; return; fi
+  local yaml="$ROOT/$1/config/game.yaml"
+  if [ -f "$yaml" ] && grep -qE '^[[:space:]]*runtime:[[:space:]]*["'"'"']?async' "$yaml"; then echo async; else echo default; fi
+}
+
+runtime_image() { [ "$(game_runtime "$1")" = async ] && echo "$ASYNC_IMAGE" || echo "$DESKTOP_IMAGE"; }
+
 ensure_desktop_image() {
   docker image inspect "$DESKTOP_IMAGE" >/dev/null 2>&1 || { say "building $DESKTOP_IMAGE (first time, ~3 min)"; docker build -t "$DESKTOP_IMAGE" docker/desktop; }
 }
@@ -71,11 +82,16 @@ php_run() {
   local flags=()
   while [ $# -gt 0 ] && [ "$1" != "--" ]; do flags+=("$1"); shift; done
   [ "${1:-}" = "--" ] && shift
-  ensure_desktop_image
+  local image; image="$(runtime_image "$wd")"
+  if [ "$image" = "$ASYNC_IMAGE" ]; then
+    docker image inspect "$ASYNC_IMAGE" >/dev/null 2>&1 || { say "building $ASYNC_IMAGE (PHP 8.6 ZTS + TrueAsync, first time ~15 min)"; docker build -t "$ASYNC_IMAGE" docker/desktop-async; }
+  else
+    ensure_desktop_image
+  fi
   docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" \
     -v "$ROOT:/workspace" -w "/workspace/$wd" \
     -e HOME=/tmp -e COMPOSER_HOME=/tmp/composer -e COMPOSER_CACHE_DIR=/workspace/.cache/composer \
-    ${flags[@]+"${flags[@]}"} "$DESKTOP_IMAGE" "$@"
+    ${flags[@]+"${flags[@]}"} "$image" "$@"
 }
 
 ensure_vendor() {
@@ -91,6 +107,10 @@ cmd_setup() {
   docker build -t "$DESKTOP_IMAGE" docker/desktop
   say "relay server image"
   docker compose build relay
+  if [ "${1:-}" = async ]; then
+    say "async runtime image ($ASYNC_IMAGE: PHP 8.6 ZTS + TrueAsync, ~15 min)"
+    docker build -t "$ASYNC_IMAGE" docker/desktop-async
+  fi
   say "done. Next: bin/jumphp engine:build (browser engine), bin/jumphp run pong"
 }
 
@@ -240,7 +260,7 @@ cmd_export_desktop() {
   local game="${1:-}"; local dir; dir="$(game_dir "$game")"
   ensure_desktop_image
   php_run "$dir" -- sh /workspace/tools/stage-web.sh "/workspace/$dir"
-  docker build -t "jumphp/game-$game" -f docker/desktop/Dockerfile.game --build-arg "BASE=$DESKTOP_IMAGE" ".build/$game"
+  docker build -t "jumphp/game-$game" -f docker/desktop/Dockerfile.game --build-arg "BASE=$(runtime_image "$(game_dir "$game")")" ".build/$game"
   say "image jumphp/game-$game. Run it with the same flags as bin/jumphp run (display + sound), e.g.:"
   echo "  docker run --rm -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix jumphp/game-$game"
 }

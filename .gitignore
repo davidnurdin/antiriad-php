@@ -10,3 +10,7 @@
 !/games/*/var/.gitkeep
 /games/*/dist/
 /games/*/cache/
+
+# crash dumps
+core
+core.[0-9]*

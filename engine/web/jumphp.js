@@ -2,6 +2,7 @@
 // player's files (IndexedDB), boots PHP and lets it run one frame per requestAnimationFrame.
 //
 // URL parameters: ?net=wss://host/ws (relay server) &room=ABCD &lang=fr &debug=1 &back=<url> (where "quit" goes)
+// &workers=N (Web Workers for JumPHP\Async, 0 = none; default: cores - 1, at most 4)
 // Embedding (games portal): the page posts {type: 'jumphp:ready' | 'jumphp:quit' | 'jumphp:bridge', ...}
 // to window.parent; window.JumPHP.onBridge(message) receives the game's custom JsBridge messages.
 const GAME = window.JUMPHP_GAME || {};
@@ -14,6 +15,9 @@ const statusEl = $('status');
 const barEl = $('bar').firstElementChild;
 const SAVE_DIR = '/game/var';
 const BRIDGE_FILE = '/tmp/jumphp-bridge';
+const TASKS_DIR = '/tmp/jumphp-tasks';
+const WORKERS = typeof Worker === 'undefined' ? 0
+	: Math.max(0, Math.min(8, Number(params.get('workers') ?? Math.min(4, (navigator.hardwareConcurrency || 2) - 1)) || 0));
 const lastLines = [];
 
 window.JumPHP = window.JumPHP || { onBridge: null, FS: null };
@@ -91,6 +95,7 @@ function prelude() {
 		`define('JUMPHP_LANG', ${phpString(lang)});`,
 		`define('JUMPHP_ROOM', ${phpString((params.get('room') || '').toUpperCase())});`,
 		`define('JUMPHP_DEBUG', ${params.get('debug') === '1' ? 'true' : 'false'});`,
+		`define('JUMPHP_WORKERS', ${WORKERS});`,
 	];
 	const net = params.get('net') || GAME.net_url;
 	if (net) lines.push(`define('JUMPHP_NET_URL', ${phpString(net)});`);
@@ -123,6 +128,77 @@ function pollBridge(FS) {
 			window.JumPHP.onBridge?.(msg);
 		}
 	}
+}
+
+// JumPHP\Async in the browser: a pool of Web Workers, each with its own PHP engine (jumphp-worker.js), started
+// with the first job. PHP writes jobs to TASKS_DIR/out/<id>.job, results come back as TASKS_DIR/in/<id>.res
+// (or .err); TASKS_DIR/disabled tells PHP to run the work itself (no worker could start).
+function startTasks(FS, wasmBinary) {
+	const slots = [];
+	let disabled = false;
+	const put = (name, data) => {
+		try {
+			FS.writeFile(`${TASKS_DIR}/in/${name}.tmp`, data);
+			FS.rename(`${TASKS_DIR}/in/${name}.tmp`, `${TASKS_DIR}/in/${name}`);
+		} catch (e) { console.error('[tasks]', e); }
+	};
+	const disable = (why) => {
+		if (disabled) return;
+		disabled = true;
+		console.warn('[tasks] no Web Worker: the game runs its tasks itself.', why || '');
+		try { FS.writeFile(`${TASKS_DIR}/disabled`, String(why || '1')); } catch (e) { /* PHP has not created the dir */ }
+	};
+	const spawn = (slot) => {
+		slot.ready = false;
+		slot.job = null;
+		const worker = slot.worker = new Worker(versioned('jumphp-worker.js'), { type: 'module' });
+		const dead = (why) => {
+			worker.terminate();
+			if (slot.job) put(`${slot.job}.err`, why);
+			if (slot.ready && ++slot.restarts < 5) return spawn(slot);   // a job crashed it: a fresh one
+			slot.dead = true;
+			if (slots.every((s) => s.dead)) disable(why);
+		};
+		worker.onmessage = ({ data }) => {
+			if (data.type === 'ready') slot.ready = true;
+			else if (data.type === 'result') { put(`${data.id}.res`, data.payload); slot.job = null; }
+			else if (data.type === 'crash') dead(data.error);
+			else if (data.type === 'failed') dead(data.error);
+		};
+		worker.onerror = (e) => { e.preventDefault(); dead(e.message || 'worker error'); };
+		worker.postMessage({
+			type: 'boot',
+			moduleUrl: new URL(versioned('php-web.mjs'), location.href).href,
+			dataUrl: new URL(versioned('php-web.data'), location.href).href,
+			wasmBinary,
+		});
+	};
+	const pump = () => {
+		requestAnimationFrame(pump);
+		if (disabled) return;
+		let jobs;
+		try { jobs = FS.readdir(`${TASKS_DIR}/out`).filter((n) => n.endsWith('.job')).sort(); } catch (e) { return; }
+		const warm = !slots.length && FS.analyzePath(`${TASKS_DIR}/warm`).exists;
+		if (!jobs.length && !warm) return;
+		if (!slots.length) {
+			if (!WORKERS) return disable('workers=0');
+			for (let i = 0; i < WORKERS; i++) slots.push({ restarts: 0 });
+			slots.forEach(spawn);
+		}
+		for (const slot of slots) {
+			if (!jobs.length) break;
+			if (!slot.ready || slot.dead || slot.job) continue;
+			const name = jobs.shift();
+			let payload;
+			try {
+				payload = FS.readFile(`${TASKS_DIR}/out/${name}`);
+				FS.unlink(`${TASKS_DIR}/out/${name}`);
+			} catch (e) { continue; }   // cancelled by PHP meanwhile
+			slot.job = name.slice(0, -4);
+			slot.worker.postMessage({ type: 'job', id: slot.job, payload }, [payload.buffer]);
+		}
+	};
+	requestAnimationFrame(pump);
 }
 
 async function main() {
@@ -190,6 +266,7 @@ async function main() {
 	await nextFrame();
 	loader.style.display = 'none';
 	setInterval(() => pollBridge(FS), 250);
+	startTasks(FS, wasmBinary);
 	window.JumPHPTouch?.start();
 	notifyParent({ type: 'jumphp:ready', game: GAME.id });
 

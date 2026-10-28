@@ -3,6 +3,7 @@
 namespace JumPHP\Kernel;
 
 use Evenement\EventEmitter;
+use JumPHP\Async\Tasks;
 use JumPHP\Audio\SoundManager;
 use JumPHP\Bridge\JsBridge;
 use JumPHP\Debug\FpsCounter;
@@ -24,7 +25,7 @@ use JumPHP\Util\Time;
  *   input -> network -> sound -> scenes update -> scenes render -> present.
  *
  * Everything a scene needs is a public property: $engine->actions, ->scenes, ->sound, ->sdl, ->options,
- * ->storage, ->config, ->input, ->lang, ->bridge, plus font() and net().
+ * ->storage, ->config, ->input, ->lang, ->bridge, plus font(), net() and tasks().
  *
  * Events: 'boot', 'frame' (float $dt) after each update, 'quit'.
  */
@@ -39,6 +40,7 @@ class Engine extends EventEmitter
     private bool $debug = false;
     private ?TextDrawer $font = null;
     private ?NetSession $net = null;
+    private ?Tasks $tasks = null;
     private ?BitmapFont $debugFont = null;
     /** Game speed multiplier (slow motion, pause = 0). */
     public float $timeScale = 1.0;
@@ -148,6 +150,7 @@ class Engine extends EventEmitter
             $this->net->poll();
         }
         $this->sound->update();
+        $this->tasks?->poll();
         $this->scenes->update($dt);
         $this->emit('frame', [$dt]);
         $this->input->endFrame();
@@ -190,6 +193,7 @@ class Engine extends EventEmitter
         }
         $this->running = false;
         $this->net?->close();
+        $this->tasks?->shutdown();
         $this->gameLoop->stop();
     }
 
@@ -219,6 +223,12 @@ class Engine extends EventEmitter
     public function net(): NetSession
     {
         return $this->net ??= new NetSession($this->config);
+    }
+
+    /** Background work: threads with the async runtime, between frames elsewhere (created on first use). */
+    public function tasks(): Tasks
+    {
+        return $this->tasks ??= new Tasks($this->config);
     }
 
     public function isDebug(): bool

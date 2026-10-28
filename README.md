@@ -62,7 +62,8 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 | `skeleton/` | le modèle de jeu copié par `bin/jumphp new` |
 | `games/pong/` | jeu de référence : contre l'ordinateur, à deux sur un clavier, en ligne |
 | `games/breakout/` | casse-briques écrit par une IA à partir d'AGENTS.md |
-| `docker/` | moteur WebAssembly, runtime bureau, relais réseau, serveur web FrankenPHP |
+| `games/hello-threads/` | POC des threads (TrueAsync) : une fractale calculée par un pool de threads |
+| `docker/` | moteur WebAssembly, runtimes bureau (PHP 8.3, et PHP 8.6 ZTS + TrueAsync), relais réseau, serveur web FrankenPHP |
 | `tools/` | scripts utilisés par `bin/jumphp` (packaging, captures, contrôles) |
 | `docs/` | documentation détaillée (français) |
 
@@ -70,7 +71,7 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 
 | Commande | Rôle |
 |---|---|
-| `setup` | construit les images Docker |
+| `setup [async]` | construit les images Docker (`async` : aussi le runtime PHP 8.6 ZTS + TrueAsync) |
 | `engine:build` | construit le moteur WebAssembly dans `build/engine/` |
 | `new <jeu> ["Titre"]` | nouveau jeu depuis le squelette |
 | `install <jeu>` / `composer <jeu> ...` | dépendances composer (paquets PHP purs uniquement) |
@@ -98,6 +99,10 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
   dans le navigateur (WebSocket / WebRTC), avec son serveur relais.
 - **Serveur web** : [FrankenPHP](https://frankenphp.dev) (Caddy + PHP). Les jeux sont statiques ; FrankenPHP
   est là pour accueillir plus tard la partie PHP du portail de jeux (comptes, scores...).
+- **Threads** (optionnel) : `runtime: async` dans `game.yaml` fait tourner le jeu sur PHP 8.6 ZTS +
+  [TrueAsync](https://true-async.github.io) : `$this->engine->tasks()` envoie le travail lourd dans de vrais
+  threads, la frame n'attend jamais. Dans le navigateur, la même API passe par un pool de Web Workers (un
+  moteur PHP WebAssembly chacun) ; sur le runtime par défaut, elle répartit le travail entre les frames. Voir [docs/async.md](docs/async.md) et `games/hello-threads`.
 
 Contraintes du navigateur (détaillées dans [docs/navigateur.md](docs/navigateur.md)) : ne jamais bloquer la
 frame (`sleep`, boucles infinies), entiers 32 bits, réseau uniquement via `JumPHP\Net`, fichiers écrits
@@ -111,6 +116,7 @@ seulement dans `var/`.
 - [docs/navigateur.md](docs/navigateur.md) : les pièges du WebAssembly
 - [docs/tiles-collisions.md](docs/tiles-collisions.md) : cartes Tiled, masques, pentes, plateformes
 - [docs/reseau.md](docs/reseau.md) : multijoueur en ligne, serveur relais, tests
+- [docs/async.md](docs/async.md) : threads avec TrueAsync, runtime async, état du navigateur
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
 - [docs/portail.md](docs/portail.md) : le futur site qui regroupera les jeux
 
@@ -174,7 +180,8 @@ breaker was written that way, by an AI that had only read this file.
 | `skeleton/` | the game template copied by `bin/jumphp new` |
 | `games/pong/` | reference game: against the computer, two players on one keyboard, online |
 | `games/breakout/` | brick breaker written by an AI from AGENTS.md |
-| `docker/` | WebAssembly engine, desktop runtime, network relay, FrankenPHP web server |
+| `games/hello-threads/` | threads POC (TrueAsync): a fractal computed by a thread pool |
+| `docker/` | WebAssembly engine, desktop runtimes (PHP 8.3, and PHP 8.6 ZTS + TrueAsync), network relay, FrankenPHP web server |
 | `tools/` | scripts used by `bin/jumphp` (packaging, screenshots, checks) |
 | `docs/` | detailed documentation (French) |
 
@@ -182,7 +189,7 @@ breaker was written that way, by an AI that had only read this file.
 
 | Command | What it does |
 |---|---|
-| `setup` | builds the Docker images |
+| `setup [async]` | builds the Docker images (`async`: also the PHP 8.6 ZTS + TrueAsync runtime) |
 | `engine:build` | builds the WebAssembly engine into `build/engine/` |
 | `new <game> ["Title"]` | new game from the skeleton |
 | `install <game>` / `composer <game> ...` | composer dependencies (pure-PHP packages only) |
@@ -210,6 +217,11 @@ breaker was written that way, by an AI that had only read this file.
   in the browser (WebSocket / WebRTC), with its relay server.
 - **Web server**: [FrankenPHP](https://frankenphp.dev) (Caddy + PHP). Games are static; FrankenPHP is there
   to host the PHP side of the future games portal (accounts, scores...).
+- **Threads** (optional): `runtime: async` in `game.yaml` runs the game on PHP 8.6 ZTS +
+  [TrueAsync](https://true-async.github.io): `$this->engine->tasks()` sends heavy work to real threads, the
+  frame never waits. In the browser the same API uses a pool of Web Workers (one PHP WebAssembly engine
+  each); on the default runtime it spreads the work over the frames.
+  See [docs/async.md](docs/async.md) (French), [AGENTS.md](AGENTS.md) §9 and `games/hello-threads`.
 
 Browser constraints (see [AGENTS.md](AGENTS.md) §2): never block the frame (`sleep`, endless loops), 32-bit
 integers, network only through `JumPHP\Net`, write files only into `var/`.

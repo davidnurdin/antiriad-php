@@ -9,7 +9,7 @@ $config = JumPHP\Kernel\GameConfig::load($game)->all();
 $engineInfo = is_file("$engineDir/engine.json") ? json_decode(file_get_contents("$engineDir/engine.json"), true) : [];
 $hash = fn (string $file) => is_file($file) ? substr(hash_file('sha256', $file), 0, 12) : '0';
 
-foreach (['jumphp.js', 'touch.js'] as $js) {
+foreach (['jumphp.js', 'jumphp-worker.js', 'touch.js'] as $js) {
     copy("$webDir/$js", "$out/$js");
 }
 $icon = 'data:,';

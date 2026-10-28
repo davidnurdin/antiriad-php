@@ -29,6 +29,7 @@ final class GameConfig
         'fullscreen_key' => 'F11',
         'smoke' => [],           // {scene: ..., params: {...}}: what `jumphp test` runs headless
         'online' => false,       // shown by the future games portal (game.json)
+        'runtime' => 'default',  // 'async': PHP 8.6 ZTS + TrueAsync on the desktop (real threads, JumPHP\Async)
     ];
 
     /** @var array<string, mixed> */

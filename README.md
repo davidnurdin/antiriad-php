@@ -35,6 +35,22 @@ Sans PHP sur la machine : `docker run --rm -it -v "$PWD":/app -w /app composer c
 puis `cd mon-jeu && bin/jumphp`. Ou simplement `git clone https://github.com/davidnurdin/jumPhp.git mon-jeu`.
 Détails : [docs/projet.md](docs/projet.md).
 
+### Tutoriel de A à Z
+
+Le tutoriel complet, pas à pas, est dans **[docs/tutoriel.md](docs/tutoriel.md)**. En résumé :
+
+| Étape | Commande | Ce qui se passe |
+|---|---|---|
+| A. Créer | `composer create-project jumphp/jumphp mon-jeu` | JumPHP est copié et relié à son dépôt par git, puis l'assistant démarre |
+| B. Configurer | (l'assistant, ou `bin/jumphp`) | outils (git, Docker...), nom et résolution du jeu, moteur navigateur, premier test |
+| C. Écrire le jeu | tu décris le jeu en quelques lignes | Claude Code le code à partir de `games/<id>/BRIEF.md`, le teste et regarde les captures |
+| D. Jouer | `bin/jumphp run <id>` / `test` / `shot` | fenêtre avec le son / contrôles automatiques / captures sans écran |
+| E. Modifier | `games/<id>/src/Scene`, `src/Entity`, `config/` | des scènes et des entités en PHP, voir [AGENTS.md](AGENTS.md) |
+| F. Navigateur | `bin/jumphp build <id>` puis `bin/jumphp serve <id>` | le même PHP en WebAssembly sur http://localhost:8080 |
+| G. Serveur | `bin/jumphp deploy:setup` puis `bin/jumphp deploy` | ton domaine en HTTPS : FrankenPHP seul, Traefik + FrankenPHP, ou un Traefik existant |
+| H. GitHub | `bin/jumphp github` (`bin/jumphp pages <id>`) | le dépôt créé avec `gh` (et le jeu sur GitHub Pages) |
+| I. Mettre à jour | `bin/jumphp update` | la dernière version de JumPHP fusionnée dans le projet |
+
 ### Démarrage rapide
 
 Démo en ligne : **https://davidnurdin.github.io/jumPhp/** (JUMPBALL en 3D WebGL, hello-webgl, hello-threads, Pong, casse-briques).
@@ -142,6 +158,7 @@ seulement dans `var/`.
 
 - [AGENTS.md](AGENTS.md) : le guide complet (anglais), pour les humains comme pour les IA
 - [docs/architecture.md](docs/architecture.md) : organisation du moteur, cycle d'une frame
+- [docs/tutoriel.md](docs/tutoriel.md) : le tutoriel de A à Z (en anglais : [docs/tutorial.md](docs/tutorial.md))
 - [docs/projet.md](docs/projet.md) : nouveau projet (composer), l'assistant, déploiement sur un serveur, GitHub, mises à jour
 - [docs/build.md](docs/build.md) : Docker, compilation du moteur, build navigateur, déploiement
 - [docs/navigateur.md](docs/navigateur.md) : les pièges du WebAssembly
@@ -180,6 +197,22 @@ ready-made prompt: you only write what your game should do.
 
 Without PHP on the machine: `docker run --rm -it -v "$PWD":/app -w /app composer create-project jumphp/jumphp my-game`,
 then `cd my-game && bin/jumphp`. Or just `git clone https://github.com/davidnurdin/jumPhp.git my-game`.
+
+### Tutorial from A to Z
+
+The complete step-by-step tutorial is **[docs/tutorial.md](docs/tutorial.md)**. In short:
+
+| Step | Command | What happens |
+|---|---|---|
+| A. Create | `composer create-project jumphp/jumphp my-game` | JumPHP is copied and linked to its repository with git, then the wizard starts |
+| B. Set up | (the wizard, or `bin/jumphp`) | tools (git, Docker...), the game's name and resolution, browser engine, a first test |
+| C. Write the game | you describe the game in a few lines | Claude Code codes it from `games/<id>/BRIEF.md`, tests it and looks at the screenshots |
+| D. Play | `bin/jumphp run <id>` / `test` / `shot` | a window with sound / automatic checks / headless screenshots |
+| E. Change it | `games/<id>/src/Scene`, `src/Entity`, `config/` | scenes and entities in PHP, see [AGENTS.md](AGENTS.md) |
+| F. Browser | `bin/jumphp build <id>` then `bin/jumphp serve <id>` | the same PHP as WebAssembly on http://localhost:8080 |
+| G. Server | `bin/jumphp deploy:setup` then `bin/jumphp deploy` | your domain over HTTPS: FrankenPHP alone, Traefik + FrankenPHP, or an existing Traefik |
+| H. GitHub | `bin/jumphp github` (`bin/jumphp pages <id>`) | the repository created with `gh` (and the game on GitHub Pages) |
+| I. Update | `bin/jumphp update` | the newest JumPHP merged into the project |
 
 ### Quick start
 
@@ -286,5 +319,6 @@ integers, network only through `JumPHP\Net`, write files only into `var/`.
 
 ### Documentation
 
+- [docs/tutorial.md](docs/tutorial.md): the tutorial from A to Z
 - [AGENTS.md](AGENTS.md): the complete guide (English), for humans and AIs alike
 - [docs/](docs/): architecture, build, browser pitfalls, tiles and collisions, network, porting, portal (French)

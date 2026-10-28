@@ -17,7 +17,9 @@ foreach ($games as $id) {
 
 HTML;
 }
-$source = $repo !== '' ? "<p>Source: <a href=\"{$e($repo)}\">{$e(preg_replace('#^https?://#', '', $repo))}</a></p>" : '';
+$source = $repo !== '' ? "<p>Source: <a href=\"{$e($repo)}\">{$e(preg_replace('#^https?://#', '', $repo))}</a>"
+    . " · Make your own game: <a href=\"{$e($repo)}/blob/main/docs/tutorial.md\">tutorial</a>"
+    . " (<a href=\"{$e($repo)}/blob/main/docs/tutoriel.md\">tutoriel en français</a>)</p>" : '';
 
 file_put_contents("$site/index.html", <<<HTML
 <!DOCTYPE html>

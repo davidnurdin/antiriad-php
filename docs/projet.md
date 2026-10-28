@@ -100,8 +100,8 @@ demande :
   |---|---|---|
   | `frankenphp` | FrankenPHP seul, ports 80 et 443, HTTPS automatique (Caddy + Let's Encrypt) | un serveur dédié au jeu, le plus simple |
   | `traefik` | Traefik (ports 80/443, Let's Encrypt, redirection HTTP → HTTPS) devant FrankenPHP | pour héberger d'autres sites ensuite derrière le même Traefik (réseau Docker `jumphp-traefik`) |
-  | `traefik-external` | FrankenPHP seul, branché sur le réseau d'un Traefik déjà installé | le serveur a déjà son Traefik : l'assistant demande son réseau Docker, son point d'entrée HTTPS (`websecure`) et son résolveur de certificats (`letsencrypt`) |
-  | `traefik-passthrough` | FrankenPHP seul, derrière un Traefik déjà installé qui laisse passer le TLS ; FrankenPHP obtient lui-même son certificat | le Traefik du serveur n'a pas de résolveur de certificats qui marche : renseigner `JUMPHP_TRAEFIK_ENTRYPOINT` (le point d'entrée :443) et `JUMPHP_TRAEFIK_HTTP_ENTRYPOINT` (le point d'entrée :80) dans `.env` |
+  | `traefik-external` | FrankenPHP seul, branché sur le réseau d'un Traefik déjà installé | le serveur a déjà son Traefik, avec un résolveur de certificats qui marche : l'assistant lit sur le serveur son réseau Docker, son point d'entrée HTTPS et son résolveur (`bin/jumphp server:traefik`) |
+  | `traefik-passthrough` | FrankenPHP seul, derrière un Traefik déjà installé qui laisse passer le TLS ; FrankenPHP obtient lui-même son certificat | le Traefik du serveur n'a pas de résolveur de certificats qui marche (aucun site ne s'en sert) : l'assistant le détecte et choisit ce mode ; points d'entrée :443 et :80 dans `JUMPHP_TRAEFIK_ENTRYPOINT` / `JUMPHP_TRAEFIK_HTTP_ENTRYPOINT` |
 
 - l'**e-mail Let's Encrypt** (modes `frankenphp` et `traefik`) ;
 - le **dossier** sur le serveur (par défaut `/opt/jumphp/<id>`).
@@ -119,7 +119,9 @@ l'utilisateur au groupe `docker`.
    un `.env` ;
 3. l'envoie avec `rsync` (seuls les fichiers modifiés partent) ;
 4. lance `docker compose up -d` sur le serveur. Les conteneurs ne sont recréés que si la configuration a
-   changé : une simple mise à jour du jeu ne coupe rien.
+   changé : une simple mise à jour du jeu ne coupe rien ;
+5. attend (2 minutes au plus) que `https://<domaine>/` réponde avec un certificat valide ; sinon il affiche
+   l'état et les journaux du conteneur, et ce qu'il faut vérifier (DNS, points d'entrée de Traefik).
 
 Les journaux du serveur web s'affichent avec `bin/jumphp server:logs`. Les certificats restent dans des
 volumes Docker (`caddy_data` ou `letsencrypt`) : ils survivent aux déploiements.

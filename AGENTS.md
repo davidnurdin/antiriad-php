@@ -130,7 +130,7 @@ games/<id>/
 | `bin/jumphp webshot <id> [seconds] [keys]` | headless Chrome: loads the browser build, presses keys, screenshot `dist/webshot.png`, fails on JS / PHP errors |
 | `bin/jumphp relay up\|down\|logs` | multiplayer relay server on `ws://localhost:8090/ws` |
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
-| `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
+| `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP), then checks that `https://<domain>/` answers (shows the server logs if not). Behind a Traefik already on the server: `bin/jumphp server:traefik` prints its entry points and resolver (`JUMPHP_SERVER_MODE` `traefik-external`, or `traefik-passthrough` when it has no working resolver). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
 | `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
 | `bin/jumphp pages [id...]` | builds the games (default: all) + a home page from their `game.json`, force-pushes them as the `gh-pages` branch of the git remote (GitHub Pages: `https://<owner>.github.io/<repo>/`). Publishing: only when asked |
 | `bin/jumphp test engine` | engine unit tests + phpstan |
@@ -422,6 +422,9 @@ Textures (`$this->sdl()`, class `Sdl`): textures have names.
 | `createTextureFromGd('name', $gdImage)` | draw with GD (imagefilledpolygon...) then use as texture |
 | `createTexture('name', $w, $h)` | empty render target |
 | `setTextureVariant('-night')` | `getTexture('tiles')` returns `tiles-night` when it exists |
+
+The `createTexture*()` / `loadTexture()` calls return a **list of slices** (wide images are cut): the resource is
+`getTexture('name')['texture']` (or `[0]['texture']` of what they return), not `['texture']` of the return value.
 
 Text: `$this->font()` is the built-in **BitmapFont** (5×7 pixels, upper case, no file):
 `draw($r, $text, $x, $y, $scale = 1, $color = white, $align = 'left'|'center'|'right', $shadowColor = null)`,

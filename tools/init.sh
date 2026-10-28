@@ -345,7 +345,16 @@ step_deploy() {
   fi
   ask domain "$(t 'Nom de domaine du jeu (sa ligne DNS A/AAAA doit viser le serveur) :' 'Domain name of the game (its DNS A/AAAA record must point to the server):')" "$(env_get JUMPHP_DOMAIN)"
   local def_mode=1
-  case "$(env_get JUMPHP_SERVER_MODE)" in traefik) def_mode=2 ;; traefik-external) def_mode=3 ;; esac
+  case "$(env_get JUMPHP_SERVER_MODE)" in traefik) def_mode=2 ;; traefik-external|traefik-passthrough) def_mode=3 ;; esac
+  # a Traefik already on the server: the wizard reads its settings rather than guessing them
+  local found="" found_mode="" http_entry=""
+  found="$("$JUMPHP" server:traefik "$target" 2>/dev/null </dev/null || true)"
+  found_get() { printf '%s\n' "$found" | sed -n "s/^$1=//p"; }
+  if [ -n "$(found_get traefik)" ]; then
+    def_mode=3
+    found_mode="$(found_get mode)"
+    ok "$(t "Traefik trouvé sur le serveur ($(found_get traefik), réseau $(found_get network))" "Traefik found on the server ($(found_get traefik), network $(found_get network))")"
+  fi
   choose mode "$(t 'Serveur web :' 'Web server:')" "$def_mode" \
     "$(t "FrankenPHP seul (HTTPS Let's Encrypt automatique ; ports 80 et 443 libres sur le serveur)" "FrankenPHP alone (automatic Let's Encrypt HTTPS; ports 80 and 443 free on the server)")" \
     "$(t "Traefik + FrankenPHP (Traefik installé avec le jeu : pratique pour héberger d'autres sites ensuite)" "Traefik + FrankenPHP (Traefik installed with the game: handy to host other sites later)")" \
@@ -353,15 +362,29 @@ step_deploy() {
   case "$mode" in
     1) env_set JUMPHP_SERVER_MODE frankenphp ;;
     2) env_set JUMPHP_SERVER_MODE traefik ;;
-    3) env_set JUMPHP_SERVER_MODE traefik-external
-       ask network "$(t 'Réseau Docker de ce Traefik :' 'Docker network of that Traefik:')" "$(env_get JUMPHP_TRAEFIK_NETWORK || true)"
+    3) local sub=1
+       [ "${found_mode:-$(env_get JUMPHP_SERVER_MODE)}" = traefik-passthrough ] && sub=2
+       [ -z "$found" ] || [ -n "$(found_get resolver)" ] || info "$(t "aucun site de ce Traefik n'utilise de résolveur de certificats : FrankenPHP prendra lui-même son certificat" "no site of that Traefik uses a certificate resolver: FrankenPHP will get its own certificate")"
+       choose sub "$(t 'Certificats HTTPS :' 'HTTPS certificates:')" "$sub" \
+         "$(t 'fournis par Traefik (son résolveur de certificats)' 'issued by Traefik (its certificate resolver)')" \
+         "$(t 'Traefik laisse passer le TLS, FrankenPHP prend son certificat (traefik-passthrough)' 'Traefik passes TLS through, FrankenPHP gets its certificate (traefik-passthrough)')"
+       ask network "$(t 'Réseau Docker de ce Traefik :' 'Docker network of that Traefik:')" "$(found_get network)"
+       [ -n "$network" ] || network="$(env_get JUMPHP_TRAEFIK_NETWORK || true)"
        [ -n "$network" ] || network=traefik
-       ask entry "$(t "Point d'entrée HTTPS de Traefik :" "HTTPS entry point of Traefik:")" "websecure"
-       ask resolver "$(t 'Résolveur de certificats de Traefik :' 'Certificate resolver of Traefik:')" "letsencrypt"
-       env_set JUMPHP_TRAEFIK_NETWORK "$network"; env_set JUMPHP_TRAEFIK_ENTRYPOINT "$entry"; env_set JUMPHP_TRAEFIK_RESOLVER "$resolver" ;;
+       ask entry "$(t "Point d'entrée HTTPS (:443) de Traefik :" "HTTPS (:443) entry point of Traefik:")" "$(found_get https | grep . || echo websecure)"
+       env_set JUMPHP_TRAEFIK_NETWORK "$network"; env_set JUMPHP_TRAEFIK_ENTRYPOINT "$entry"
+       if [ "$sub" = 1 ]; then
+         env_set JUMPHP_SERVER_MODE traefik-external
+         ask resolver "$(t 'Résolveur de certificats de Traefik :' 'Certificate resolver of Traefik:')" "$(found_get resolver | grep . || echo letsencrypt)"
+         env_set JUMPHP_TRAEFIK_RESOLVER "$resolver"
+       else
+         env_set JUMPHP_SERVER_MODE traefik-passthrough
+         ask http_entry "$(t "Point d'entrée HTTP (:80) de Traefik :" "HTTP (:80) entry point of Traefik:")" "$(found_get http | grep . || echo web)"
+         env_set JUMPHP_TRAEFIK_HTTP_ENTRYPOINT "$http_entry"
+       fi ;;
   esac
-  if [ "$mode" != 3 ]; then
-    ask email "$(t "E-mail pour Let's Encrypt (avis d'expiration des certificats) :" "E-mail for Let's Encrypt (certificate expiry notices):")" "$(env_get JUMPHP_ACME_EMAIL)"
+  if [ "$(env_get JUMPHP_SERVER_MODE)" != traefik-external ]; then
+    ask email "$(t "E-mail pour Let's Encrypt (avis d'expiration des certificats, facultatif) :" "E-mail for Let's Encrypt (certificate expiry notices, optional):")" "$(env_get JUMPHP_ACME_EMAIL)"
     env_set JUMPHP_ACME_EMAIL "$email"
   fi
   local game; game="$(env_get JUMPHP_GAME)"

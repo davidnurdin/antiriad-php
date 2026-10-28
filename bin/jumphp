@@ -56,6 +56,7 @@ Games (<game> = a folder of games/, e.g. pong)
   deploy:setup              ask the server, domain, web server (FrankenPHP / Traefik + FrankenPHP / existing Traefik)
   server:setup              install Docker on the server (ssh)
   server:logs               the server's web logs
+  server:traefik [user@host]  looks for a Traefik on the server: network, entry points, certificate resolver in use
   github                    put the project on GitHub (gh), optionally GitHub Pages
   pages [game...]           build the games (default: all) + a home page, publish them on the gh-pages
                             branch of the git remote (GitHub Pages; the branch is replaced each time)
@@ -400,7 +401,27 @@ ENV
   local up="docker compose up -d --remove-orphans"
   [ -z "$changed" ] || up="$up --force-recreate"     # a new configuration: restart the containers
   ssh -n "$target" "cd '$dir' && $up" || die "docker compose failed on the server (Docker installed? bin/jumphp server:setup)"
-  say "online: https://$JUMPHP_DOMAIN/  (the first visit can take a few seconds: the certificate is being issued)"
+  check_online "$target" "$dir" "$mode"
+}
+
+# After a deploy: waits (2 min at most) for https://<domain>/ to answer with a valid certificate; otherwise shows why.
+check_online() {
+  local target="$1" dir="$2" mode="$3" url="https://$JUMPHP_DOMAIN/" i
+  command -v curl >/dev/null || { say "online: $url"; return 0; }
+  say "waiting for $url (the first time, the certificate is being issued)"
+  for i in $(seq 1 24); do
+    if curl -fsS -o /dev/null -m 10 -A jumphp-deploy "$url" 2>/dev/null; then say "online: $url"; return 0; fi
+    sleep 5
+  done
+  warn "$url does not answer with a valid certificate after 2 minutes. On the server:"
+  ssh -n "$target" "cd '$dir' && docker compose ps && docker compose logs --tail 15" || true
+  case "$mode" in
+    traefik-external) warn "behind a Traefik: are JUMPHP_TRAEFIK_ENTRYPOINT / _RESOLVER the ones of that Traefik?" \
+      "bin/jumphp server:traefik shows them; without a working resolver: JUMPHP_SERVER_MODE=traefik-passthrough" ;;
+    traefik-passthrough) warn "behind a Traefik: are JUMPHP_TRAEFIK_ENTRYPOINT (:443) and JUMPHP_TRAEFIK_HTTP_ENTRYPOINT (:80) the ones of that Traefik? (bin/jumphp server:traefik)" ;;
+    *) warn "does the DNS of $JUMPHP_DOMAIN point to the server, are its ports 80 and 443 open?" ;;
+  esac
+  return 1
 }
 
 # Docker on the server (Docker's official install script), the ssh user in the docker group.
@@ -415,6 +436,41 @@ cmd_server_setup() {
 cmd_server_logs() {
   [ -n "${JUMPHP_SERVER:-}" ] || die "no server: bin/jumphp deploy:setup"
   ssh -t "$JUMPHP_SERVER" "cd '$(server_dir)' && docker compose logs -f --tail 100"
+}
+
+# A Traefik already running on the server, as key=value lines (read by the wizard): its container, Docker network,
+# entry points on :80 (http=) and :443 (https=), the certificate resolver the other sites use (resolver=, empty:
+# none, so Traefik can not issue certificates: traefik-passthrough), and the mode to use (mode=).
+cmd_server_traefik() {
+  local target="${1:-${JUMPHP_SERVER:-}}"
+  [ -n "$target" ] || die "no server: bin/jumphp server:traefik user@host (or JUMPHP_SERVER in .env)"
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$target" 'sh -s' <<'REMOTE'
+c="$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk '$2 ~ /traefik/ {print $1; exit}')"
+[ -n "$c" ] || { echo "traefik="; exit 0; }
+echo "traefik=$c"
+echo "network=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | awk '{print $1}')"
+# the static configuration: command line arguments, then the mounted .toml / .yml files
+{ docker inspect -f '{{range .Args}}{{println .}}{{end}}' "$c"
+  for f in $(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$c"); do
+    case "$f" in *.toml|*.yml|*.yaml) [ -f "$f" ] && cat "$f" ;; esac
+  done
+} | awk '
+  tolower($0) ~ /entrypoints\.[a-z0-9_-]+\.address/ {
+    s = $0; sub(/.*[eE]ntry[pP]oints\./, "", s); name = s; sub(/\..*/, "", name)
+    port = s; sub(/.*:/, "", port); gsub(/[^0-9]/, "", port); print port " " name; next }
+  tolower($0) ~ /^[ \t]*\[entrypoints\.[a-z0-9_-]+\]/ {
+    s = $0; sub(/.*[eE]ntry[pP]oints\./, "", s); sub(/\].*/, "", s); name = s; next }
+  /^[ \t]+[A-Za-z0-9_-]+:[ \t]*$/ { s = $0; gsub(/[ \t:]/, "", s); yname = s; next }
+  tolower($0) ~ /address/ && /:[0-9]+/ {
+    port = $0; sub(/.*:/, "", port); gsub(/[^0-9]/, "", port)
+    n = name != "" ? name : yname; if (n != "") print port " " n; name = "" }
+' | awk '$1 == 80 && !h {print "http=" $2; h = 1} $1 == 443 && !s {print "https=" $2; s = 1}'
+# a resolver is only trusted when another site uses it (a resolver can be declared and still not work)
+labels="$(docker ps -q | xargs -r docker inspect -f '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{println}}{{end}}')"
+resolver="$(printf '%s\n' "$labels" | sed -n 's/^traefik\.http\.routers\.[^.]*\.tls\.certresolver=//p' | sort | uniq -c | sort -rn | awk '{print $2; exit}')"
+echo "resolver=$resolver"
+if [ -n "$resolver" ]; then echo "mode=traefik-external"; else echo "mode=traefik-passthrough"; fi
+REMOTE
 }
 
 # Static site of several games on GitHub Pages: <site>/index.html + <site>/<game>/ (browser builds), pushed as
@@ -487,6 +543,7 @@ main() {
     github) exec bash "$ROOT/tools/init.sh" --github ;;
     server:setup) cmd_server_setup ;;
     server:logs) cmd_server_logs ;;
+    server:traefik) cmd_server_traefik "$@" ;;
     update) cmd_update ;;
     engine:download) cmd_engine_download "$@" ;;
     engine:pack) cmd_engine_pack ;;

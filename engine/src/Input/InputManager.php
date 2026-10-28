@@ -46,7 +46,10 @@ class InputManager extends EventEmitter
                 case \SDL_MOUSEBUTTONUP:
                     $down = $event->type === \SDL_MOUSEBUTTONDOWN;
                     if ($event->button !== null) {
-                        $this->moveMouse($renderer, $event->button->x, $event->button->y);
+                        if ($down) {
+                            // not on release: the release of a touch (synthesised by SDL) says 0,0
+                            $this->moveMouse($renderer, $event->button->x, $event->button->y);
+                        }
                         $down ? $this->mouse->down($event->button->button) : $this->mouse->up($event->button->button);
                     } else {
                         $this->mouseFromState($renderer, $down);
@@ -86,7 +89,10 @@ class InputManager extends EventEmitter
         $x = 0;
         $y = 0;
         $mask = (int)\SDL_GetMouseState($x, $y);
-        $this->moveMouse($renderer, (float)$x, (float)$y);
+        if ($down !== false) {
+            // not on release: after a touch SDL may report 0,0
+            $this->moveMouse($renderer, (float)$x, (float)$y);
+        }
         if ($down === null) {
             return;
         }

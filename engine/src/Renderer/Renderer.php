@@ -26,11 +26,14 @@ class Renderer
     private array $letterbox = [0, 0, 0, 0];
     /** @var array<int, callable> drawn after the scaled view, at window resolution */
     private array $overlays = [];
+    /** @var resource|object|null */
+    private $window = null;
 
     /** @param resource|object|null $window SDL window, or null with $surface (headless: software renderer) */
     public function __construct($window, int $viewWidth, int $viewHeight, bool $vsync = true, $surface = null)
     {
         \SDL_SetHint(\SDL_HINT_RENDER_SCALE_QUALITY, '0'); // nearest: crisp pixels
+        $this->window = $window;
         if ($surface !== null) {
             $this->renderer = \SDL_CreateSoftwareRenderer($surface);
         } else {
@@ -156,12 +159,23 @@ class Renderer
         return $this->letterbox;
     }
 
-    /** Window pixel -> view pixel (mouse, touch). */
+    /** Window pixel (logical: CSS pixels in the browser) -> view pixel (mouse, touch). */
     public function windowToView(float $px, float $py): array
     {
         [$x, $y, $w, $h] = $this->letterbox;
         if ($w === 0 || $h === 0) {
             return [$px, $py];
+        }
+        if ($this->window !== null) {
+            // HiDPI (phones: 2-3 output pixels per CSS pixel): the letterbox is in output pixels
+            $ww = 0;
+            $wh = 0;
+            \SDL_GetWindowSize($this->window, $ww, $wh);
+            [$ow, $oh] = $this->outputSize();
+            if ($ww > 0 && $wh > 0) {
+                $px *= $ow / $ww;
+                $py *= $oh / $wh;
+            }
         }
         return [($px - $x) * $this->viewWidth / $w, ($py - $y) * $this->viewHeight / $h];
     }

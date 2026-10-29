@@ -51,6 +51,15 @@ final class Gfx
         $r->copy($tex, [$s['x'], $s['y'], $s['w'], $h], (int)round($x), (int)round($y), $s['w'], $h, ($id & 0x80) !== 0);
     }
 
+    /** Tal's front sprite (#09) through dissolve mask $step (12 = whole .. 0 = gone), as #6E30 draws it. */
+    public function dissolve(Renderer $r, int $palette, int $step, float $x, float $y): void
+    {
+        $s = $this->world->sprites[9];
+        $name = sprintf('dissolve-%02d', $palette);
+        $tex = $this->texture($name, "assets/sprites/$name.png");
+        $r->copy($tex, [$step * $s['w'], 0, $s['w'], $s['h']], (int)round($x), (int)round($y), $s['w'], $s['h']);
+    }
+
     /** Size in view pixels of sprite $id. */
     public function size(int $id): array
     {

@@ -209,13 +209,17 @@ final class Hero
         $joyDir = ($in['right'] ? 8 : 0) | ($in['left'] ? 4 : 0);
         $grounded = $this->onGround && $this->rise < 0;
         if ($grounded) {
-            // #6659: jumps. Up standing sideways: straight up; fire (or up / jump) walking: forward.
+            // #6659: jumps. Fire walking, or fire with the way he faces standing: forward; up standing
+            // sideways: straight up (up walking only stops him: the automaton). Jump (Z) = fire walking.
             $standing = $this->anim === self::STAND_L || $this->anim === self::STAND_R;
             $walking = $this->anim === self::WALK_L || $this->anim === self::WALK_R;
-            if ($walking && ($in['fire'] || $in['jump'] || $in['up'])) {
+            $ahead = $in['right'] && $this->facing > 0 || $in['left'] && $this->facing < 0;
+            if ($walking && ($in['fire'] || $in['jump'])) {
+                $this->jump($this->facing);
+            } elseif ($standing && ($in['fire'] || $in['jump']) && $ahead) {
                 $this->jump($this->facing);
             } elseif ($standing && ($in['up'] || $in['jump'])) {
-                $this->jump($in['right'] && $this->facing > 0 || $in['left'] && $this->facing < 0 ? $this->facing : 0);
+                $this->jump(0);
             } else {
                 $this->control($room, $in, $joyDir);
             }

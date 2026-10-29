@@ -150,20 +150,26 @@ def save_pens(pens, pal, path, width=None):
 MIRRORED = 0x93B2
 
 
-def sprite_pens(n):
+DISSOLVE = 0x8E22        # 13 masks of 13 bytes: #6E30 draws a sprite ANDed with mask #B412 (12 .. 0)
+
+
+def sprite_pens(n, mask=None):
     """#6D3C: sprite n, one source byte = 4 pixels through #0200/#0300, ORed with its colour.
     A screen byte whose two pixels are 0 in the source keeps the background: None there.
     #73F0 mirrors a sprite's bytes in place when it is asked the other way round than last time and keeps
     that way in #93B2 + n (bit 7): such a sprite is turned back here, every sheet faces the bit-7-clear way."""
     a, cw, h = w16(SPRITES + n * 4), m[SPRITES + n * 4 + 2], m[SPRITES + n * 4 + 3]
     c = m[SPRITE_COLOUR + n]
-    rows = []
+    rows, k = [], 0
     for y in range(h):
         row = []
         for x in range(cw):
             e = m[(a + y * cw + x) & 0xFFFF]
             for half in (0x200, 0x300):
                 raw = m[half + e]
+                if mask is not None:          # #6E9B: the expanded byte ANDed with the next mask byte
+                    raw &= m[DISSOLVE + mask * 13 + k % 13]
+                    k += 1
                 if raw == 0:
                     row += [None, None]
                 else:
@@ -256,6 +262,22 @@ def main():
                         px[s['x'] + xx * 2 + 1, s['y'] + yy] = rgb + (255,)
         img.save(f'{OUT}/sprites/sprites-{pi:02d}' + ('-lit' if lit else '') + '.png')
     world['sprites'] = sprites
+
+    # Tal getting into the suit (#6094 -> #5D9E): his front sprite (#09) fades out through the 13 masks of
+    # #6E30, step 12 first; one row of 13 per palette
+    tal = [sprite_pens(9, step) for step in range(13)]
+    tw, th = len(tal[0][0]) * 2, len(tal[0])
+    for pi in range(14):
+        pal = palette(pi)
+        img = Image.new('RGBA', (tw * 13, th), (0, 0, 0, 0))
+        px = img.load()
+        for step, pens in enumerate(tal):
+            for yy, row in enumerate(pens):
+                for xx, pen in enumerate(row):
+                    if pen is not None:
+                        px[step * tw + xx * 2, yy] = HW[pal[pen]] + (255,)
+                        px[step * tw + xx * 2 + 1, yy] = HW[pal[pen]] + (255,)
+        img.save(f'{OUT}/sprites/dissolve-{pi:02d}.png')
 
     world['anims'] = [anim(i) for i in range(0x40)]
     world['types'] = [list(m[TYPES + 4 * (t - 1):TYPES + 4 * t]) if t else [0, 0, 0, 0] for t in range(0x40)]

@@ -64,6 +64,8 @@ final class Game
     /** its missile (the original's first free slot after the room's objects): one at a time */
     private ?Actor $missile = null;
     /** ticks left of Tal getting into the suit (#5D9E: 12, Tal and the suit flickering), -1: no */
+    public const ENTER_TICKS = 21;
+    /** ticks left of Tal's fading into the suit, -1 = not getting in */
     public int $entering = -1;
     private ?Actor $enteringSuit = null;
     /** the dashboard: lit (pens of the suit), the suit's first start (#604F: the flicker of #8E12) */
@@ -236,8 +238,15 @@ final class Game
             $h->inSuit ? $this->suitTick($in) : $this->footTick($in);
             $this->roomEdges();
         }
+        $saucer = false;
         foreach ($this->actors as $a) {
+            $was = $a->frame & 0x7F;
             $a->tick($h->x, $h->y);
+            // #5547: a saucer's whine, each time its animation (#3B) comes back to sprite #6E
+            $saucer = $saucer || ($a->frame & 0x7F) === 0x6E && $was !== 0x6E;
+        }
+        if ($saucer) {
+            $this->sound('saucer');
         }
         $this->missiles();
         if ($this->entering < 0) {
@@ -424,8 +433,7 @@ final class Game
         }
         $zone = self::zone($this->room);
         if ($zone >= 2 && $zone <= 4 && !$this->demo) {
-            $this->life = max(0, $this->life - intdiv($zone, 2));
-            $this->sound('hurt');
+            $this->life = max(0, $this->life - intdiv($zone, 2));    // #6F66 sounds #19 + zone: not extracted yet
         }
     }
 
@@ -450,8 +458,7 @@ final class Game
         $a->kind = Actor::SHOT;
         $a->damage = 1;                           // #5D2B: a stone takes one hit, the pulse beam two
         $a->life = 60;
-        $this->actors[] = $a;
-        $this->sound('shoot');
+        $this->actors[] = $a;                     // silent in the original
     }
 
     private function fireBeam(): void
@@ -644,10 +651,10 @@ final class Game
         $this->sound('pickup');
     }
 
-    /** #6094: Tal fades into the suit (12 ticks, both flickering), then it is his (#60D3). */
+    /** #6094: Tal fades out in front of the suit (#5D9E: 12 dissolve masks, ~1.4 s), then it is his (#60D3). */
     private function enterSuit(Actor $a): void
     {
-        $this->entering = 12;
+        $this->entering = self::ENTER_TICKS;
         $this->enteringSuit = $a;
         $this->sound('enter');
     }
@@ -697,6 +704,6 @@ final class Game
         $h->stand();
         $this->suitCooldown = 40;                 // #6180: #B517 = #28
         $this->dashLit = false;                   // #61D2
-        $this->sound('enter');
+        $this->sound('leave');
     }
 }

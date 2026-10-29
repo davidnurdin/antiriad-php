@@ -25,7 +25,7 @@ run() {  # run <dir> <frames> [options...]
   local dir="$WORK/$1" frames=$2; shift 2
   mkdir -p "$dir"
   (cd "$WORK" && "$CPC" "$DSK" "$dir" "$frames" -rom "$ROM" -urom "7:$AMSDOS" \
-     -type '100:RUN"ANTIRIAD\n' -type '300:S\n' "$@" >/dev/null 2>&1)
+     -type '100:RUN"ANTIRIAD\n' -type "300:${TRAINER:-S}\n" "$@" >/dev/null 2>&1)
 }
 GAMEPLAY=(-k '800:joy_fire+,820:joy_fire-' -F 900:5572=00)
 
@@ -35,9 +35,12 @@ mkdir -p "$ASSETS"
 python3 -I "$HERE/export.py" "$D2J/tools" "$WORK/game/dump-01290.bin" "$ASSETS"
 
 ogg() {  # ogg <psg.bin> <from> <to> <out.ogg> [trim]: AY log -> mono Ogg (trim: the silent end cut off)
-  python3 -I "$PSG" render "$1" "$2" "$3" "$WORK/tmp.wav" >/dev/null
-  local af=apad=pad_dur=0.15                                  # padded: Vorbis drops a lone 80 ms
-  [ "${5:-}" = trim ] && af="areverse,silenceremove=start_periods=1:start_threshold=-55dB,areverse,$af"
+  # rendered after a full-volume reference (psgcal.py, cut off again): the sounds keep their CPC levels
+  python3 -I "$HERE/psgcal.py" "$1" "$2" "$3" "$WORK/cal.bin"
+  python3 -I "$PSG" render "$WORK/cal.bin" 0 $(( $3 - $2 + 2 )) "$WORK/tmp.wav" >/dev/null
+  local af=atrim=start=0.04,asetpts=PTS-STARTPTS,apad=pad_dur=0.15   # padded: Vorbis drops a lone 80 ms
+  [ "${5:-}" = lead ] && af="atrim=start=0.04,asetpts=PTS-STARTPTS,silenceremove=start_periods=1:start_threshold=-70dB,apad=pad_dur=0.15"
+  [ "${5:-}" = trim ] && af="atrim=start=0.04,asetpts=PTS-STARTPTS,areverse,silenceremove=start_periods=1:start_threshold=-70dB,areverse,apad=pad_dur=0.15"
   ffmpeg -loglevel error -y -i "$WORK/tmp.wav" -af "$af" -ac 1 -c:a libvorbis -q:a 2 "$4"
 }
 
@@ -65,17 +68,30 @@ sound() {  # sound <name> <frames> "ch:id ..."
   ogg "$WORK/snd-$name/psg.bin" 1101 $((1101 + frames)) "$out" "${4:-}"
 }
 echo "sound effects..."
-sound shoot 40 "0:0b"          # #6567: a pulse beam leaves (a stone is silent)
+# Played alone like this, many sounds lose their envelope (a flat tone at volume 7): those are cut out of
+# real games below instead (hurt, saucer, leave).
+sound shoot 40 "2:0b"          # #6567: a pulse beam leaves; #567E: the turret fires (a stone is silent)
 sound pickup 14 "0:0c"         # #5A07: an object is taken
-sound hurt 50 "0:13"           # #5BE1: Tal (or the suit) is hit, #5D4F: an enemy dies
 sound hit 4 "0:1e"             # #5D44: an enemy is hit
-sound step 4 "0:15"            # #555B: a footstep (walk frames 0 and 4) / #6642: landing
-sound beam 26 "0:16"           # #5C06: the suit crosses an energy beam
-sound suit 60 "0:04"           # #6147: the suit comes to life
+sound step 3 "1:15"            # #555B: a footstep (walk frames 0 and 4) / #6642: landing
+sound beam 26 "0:16"           # #5C06: a separating line is crossed
+sound suit 100 "2:04" lead     # #6147: the suit comes to life (it starts 48 frames after the call)
 sound message 25 "0:07"        # #5EF7: a message starts
-sound enter 60 "1:0e 2:0f" trim     # #60C4 / #61A6: Tal gets into / out of the suit
+sound enter 75 "1:0e 2:0f" trim     # #60C4: Tal gets into the suit (a hum swelling and dying away, 72 frames)
 sound activate 120 "0:05 1:06" trim # #6085: the suit is brought to life (the boots)
 sound teleport 60 "2:0d" trim       # #7184: a room with a teleporter (#29)
 sound death 82 "0:10 1:11 2:12"        # #5816: Tal dies
 sound victory 1150 "0:17 1:18 2:19"    # #5C3E: the base is destroyed
+# #61A6: out of the suit, cut from a real game: start in room 63 on the suit (#58E0 / #58EB, #B403-#B404),
+# in at once (#6094), left at frame 1400 steps out: the hum then sounds on channel B alone (frames 1403-1475)
+run leave 1480 -k '780:joy_fire+,820:joy_fire-,1400:joy_left+,1420:joy_left-' -F 700:5572=00 \
+  -F 700:58e0=3f -F 700:58eb=3f -F 840:b403=17 -F 840:b404=40
+ogg "$WORK/leave/psg.bin" 1403 1476 "$ASSETS/sfx/leave.ogg"
+# #5BE1: an enemy touches Tal (a falling whistle on channel C, 48 frames): room 2 without the trainer
+# ("N"), the enemies come at him
+TRAINER=N run hurt 1180 -k '780:joy_fire+,820:joy_fire-' -F 700:5572=00 -F 700:58e0=02 -F 700:58eb=02
+ogg "$WORK/hurt/psg.bin" 1126 1175 "$ASSETS/sfx/hurt.ogg"
+# #5547: a saucer's whoosh (noise on channel B swelling and dying away, 85 frames): room 3
+run saucer 1180 -k '780:joy_fire+,820:joy_fire-' -F 700:5572=00 -F 700:58e0=03 -F 700:58eb=03
+ogg "$WORK/saucer/psg.bin" 1089 1173 "$ASSETS/sfx/saucer.ogg"
 echo "done: $ASSETS"

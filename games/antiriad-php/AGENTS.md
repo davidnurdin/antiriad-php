@@ -36,16 +36,21 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   3 negator (6). Suit in room 63. The core is in room 0.
 - **Tal on foot** is the original's automaton (`Hero::NEXT` = #8F4B): standing sideways, turning round
   through the pose facing the player (#01), walking, crouching (= picking up), throwing (the stone flies
-  an arc: programs 1 / 2), jumping (up standing; fire / up walking: forward), landing. The ceiling stops
-  a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in.
+  an arc: programs 1 / 2, silent), jumping (#6659: up standing: straight up; fire walking, or fire + the way he
+  faces standing: forward; up walking only stops him), landing. The ceiling stops
+  a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in: he dissolves in front of it
+  (#5D9E / #6E30: 12 masks of #8E22, `sprites/dissolve-PP.png`), then the suit lights up.
 - **The suit**: #17 (just in / come down facing the player: left / right steps out), #16, #18-#1B; with
   the boots it hangs in the air, up / down move it. The first time in, the dashboard starts (#8E12
   flicker, then score, dial, bars a unit a tick); it is lit (`hud-lit.png`, `sprites-PP-lit.png`: pens
   13-15 of the suit) while Tal is inside.
+- **Phones**: a floating stick (`touch: pad: stick`), A = fire, B = suit.
 - **Controls** (`config/input.yaml`): arrows, up / Z = jump (thrust in the suit), Space = throw / fire,
   down = crouch / pick up, E = in / out of the suit (also), Escape = pause.
 - **Test params** of `PlayScene`: `room`, `x`, `y`, `suit`, `energy`, `modules` (list), `lives`, `demo`.
 - **Sprites** face left in the sheets; bit 7 mirrors them (facing right). #73F0 mirrors sprite bytes in place (state in #93B2): export.py turns them back.
 - **Sounds** where the original plays them (`tools/extract/extract.sh`): steps on walk frames 0 and 4
-  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room...
+  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room, a saucer's whoosh
+  (when an animation reaches sprite #6E). Played alone through #752A some lose their envelope: hurt, saucer
+  and leave are cut from real games instead. The cave radiation sound (#6F66) is not extracted yet.
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

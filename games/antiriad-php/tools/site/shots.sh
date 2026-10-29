@@ -15,9 +15,9 @@ shot() {  # shot <name> <frames> <scene params JSON> [input JSON]
 }
 bin/jumphp shot "$GAME" 150 var/screenshots/site/title.png >/dev/null
 shot jungle 110 '{"lives":5}' '[[20,"right","hold"],[75,"right","release"],[80,"fire"]]'
-shot suit 150 '{"room":63,"x":12,"y":130,"modules":[0,1]}' '[[10,"right","hold"],[40,"right","release"],[45,"jump"],[70,"right","hold"],[95,"right","release"],[100,"down","hold"],[110,"down","release"],[120,"up","hold"],[140,"fire"]]'
+shot suit 60 '{"room":63,"x":24,"y":63,"suit":true,"modules":[0,1]}' '[[2,"up","hold"],[30,"up","release"],[31,"right","hold"],[50,"fire"]]'
 shot caves 90 '{"room":9,"x":40,"y":120,"suit":true,"modules":[0,1],"energy":22}' '[[10,"left","hold"],[50,"up","hold"],[80,"fire"]]'
 shot ruins 90 '{"room":45,"x":20,"y":100,"suit":true,"modules":[0,1,3]}' '[[10,"right","hold"],[60,"fire"]]'
 shot base 90 '{"room":0,"x":20,"y":120,"suit":true,"modules":[0,1,2,3]}' '[[10,"right","hold"],[40,"up","hold"],[70,"fire"]]'
-shot armour 40 '{"room":63,"x":40,"y":130}' '[[2,"left","hold"],[16,"left","release"]]'
+shot armour 40 '{"room":63,"x":40,"y":127}' '[[2,"left","hold"],[16,"left","release"]]'
 python3 -I "$DIR/tools/site/images.py" "$OUT" "$DIR"

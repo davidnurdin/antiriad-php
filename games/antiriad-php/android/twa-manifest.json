@@ -13,14 +13,14 @@
   "backgroundColor": "#000000",
   "enableNotifications": false,
   "startUrl": "/antiriad-php/jouer?app=1",
-  "iconUrl": "https://jumphp.net/media/icons/antiriad-php-3709cbb4ea3a-512.png",
+  "iconUrl": "https://jumphp.net/media/icons/antiriad-php-1914393e8c7c-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "/keys/io.github.davidnurdin.antiriad_php.keystore",
     "alias": "upload"
   },
-  "appVersionName": "3",
-  "appVersionCode": 3,
+  "appVersionName": "4",
+  "appVersionCode": 4,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://jumphp.net/antiriad-php/manifest.webmanifest",
@@ -45,5 +45,5 @@
     "fullscreen",
     "standalone"
   ],
-  "appVersion": "3"
+  "appVersion": "4"
 }

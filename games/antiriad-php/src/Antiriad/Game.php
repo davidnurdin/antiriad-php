@@ -674,6 +674,10 @@ final class Game
             $this->life = max(0, $this->life - $bite);
         }
         $h->invulnerable = 3;
+        if ($a->armoured) {
+            return;                               // #5BC4: no sound, no score, it stays
+        }
+        $this->score += ($h->inSuit ? $a->points >> 1 : $a->points) * 10;   // #5BCE: what bites dies for points
         $this->sound('hurt');
         if ($a->kind === Actor::ENEMY) {
             $a->vanish();                         // #5BED: it fades away

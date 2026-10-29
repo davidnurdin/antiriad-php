@@ -29,6 +29,8 @@ final class Actor
     public int $damage = 0;
     /** score when shot down (type byte 2) */
     public int $points = 0;
+    /** type byte 0 bit 7: what cannot be hurt (#5D1A) bites in silence and stays (#5BC4: the hanging beast) */
+    public bool $armoured = false;
     public bool $dead = false;
     /** index in the world's item list (cells / modules) when it is one */
     public int $itemIndex = -1;
@@ -64,6 +66,7 @@ final class Actor
         $t = $world->type($type);
         $this->damage = $t[1] & 0x1F;
         $this->points = $t[2];
+        $this->armoured = ($t[0] & 0x80) !== 0;
         if ($t[0] & 0x40) {
             $this->kind = self::ENEMY;
             $this->hits = max(1, $t[1] >> 5);

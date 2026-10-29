@@ -46,6 +46,31 @@ final class PlayScene extends AbstractScene
         $this->latch = [];
         $this->sound()->stopMusic();
         $this->flushMessages();
+        $this->makeScanner();
+    }
+
+    private const SCANNER_FRAMES = 6;
+
+    /** The suit's scanner (the centre screen): noise of pens 0-3 as the emulator shows it, a few pictures. */
+    private function makeScanner(): void
+    {
+        if ($this->sdl()->hasTexture('scanner-0')) {
+            return;
+        }
+        mt_srand(1986);
+        for ($f = 0; $f < self::SCANNER_FRAMES; $f++) {
+            $rows = [];
+            for ($y = 0; $y < 23; $y++) {
+                $row = '';
+                for ($x = 0; $x < 41; $x++) {
+                    $n = mt_rand(0, 99);         // ~45 % black, 25 % blue, 20 % red, 10 % cyan
+                    $row .= $n < 45 ? '.' : ($n < 70 ? 'b' : ($n < 90 ? 'r' : 'c'));
+                }
+                $rows[] = $row;
+            }
+            $this->sdl()->createTextureFromPixels("scanner-$f", $rows, ['b' => [0, 128, 255], 'r' => [255, 0, 0], 'c' => [0, 255, 255]]);
+        }
+        mt_srand();
     }
 
     public function update(float $dt): void
@@ -148,8 +173,8 @@ final class PlayScene extends AbstractScene
         $this->renderHud($r);
     }
 
-    /** #8B9A: the dial's segments: row, column, glyph */
-    private const DIAL = [[21, 27, 0x78], [20, 27, 0x77], [19, 27, 0x76], [19, 28, 0x62], [19, 29, 0x74], [20, 29, 0x73], [21, 29, 0x72]];
+    /** #8B9A: the dial's segments: row, column, character (through #8B3D: 'x' = glyph #30...) */
+    private const DIAL = [[21, 27, 'x'], [20, 27, 'w'], [19, 27, 'v'], [19, 28, 'b'], [19, 29, 't'], [20, 29, 's'], [21, 29, 'r']];
 
     private function renderHud(Renderer $r): void
     {
@@ -181,35 +206,36 @@ final class PlayScene extends AbstractScene
         }
         if ($g->dashOn && $cpc !== null) {
             $font->draw($r, sprintf('%05d', min(99999, $g->score)), 80, 160, 1, self::RED);   // #6137
-            $cpc->glyph($r, ord('z'), 34 * 8, 20 * 8, self::RED);                            // #612E
+            $cpc->sign($r, 'z', 34 * 8, 20 * 8, self::RED);                                  // #612E
             // #72CA: the radiation dial, one segment more per zone, '!' from zone 5 (the base)
             $zone = Game::zone($g->room);
-            foreach (array_slice(self::DIAL, 0, $zone + 1) as [$row, $col, $code]) {
-                $cpc->glyph($r, $code, $col * 8, $row * 8, self::RED);
+            foreach (array_slice(self::DIAL, 0, $zone + 1) as [$row, $col, $ch]) {
+                $cpc->sign($r, $ch, $col * 8, $row * 8, self::RED);
             }
-            $cpc->glyph($r, ord('y'), 28 * 8, 21 * 8, self::RED);
+            $cpc->sign($r, 'y', 28 * 8, 21 * 8, self::RED);
             if ($zone >= 5) {
                 $font->draw($r, '!', 27 * 8, 23 * 8, 1, self::RED);
             }
         }
-        // #5DE9: the bars follow the suit's energy and Tal's life a unit a tick (4 units a screen byte)
+        // #5DFC: the bars follow the suit's energy (#D5FA) and Tal's life (#D69A) a unit a tick: value v is
+        // v + 1 pixels (#8EBE: 1-4 pixels in its last byte) 4 lines high, pen 1 (red) for the first 16, pen 3
+        // (cyan) after; black behind
         if ($g->shownLife >= 0) {
-            $low = $g->energy < 7 && $g->tick % 6 < 3;
-            $r->fillRect(40, 152, $g->shownEnergy, 8, $low ? [128, 0, 0] : self::RED);
-            $r->fillRect(40, 168, $g->shownLife, 8, self::RED);
+            foreach ([[154, $g->shownEnergy], [170, $g->shownLife]] as [$y, $v]) {
+                $r->fillRect(38, $y - 2, 36, 8, [0, 0, 0]);
+                $w = $v > 0 ? min(32, $v + 1) : 0;
+                $r->fillRect(40, $y, min(16, $w), 4, self::RED);
+                if ($w > 16) {
+                    $r->fillRect(56, $y, $w - 16, 4, [0, 255, 255]);
+                }
+            }
         }
         // the centre screen: the mine's countdown, or the suit's scanner
         if ($g->countdown !== null) {
             $font->draw($r, (string)max(0, intdiv($g->countdown, 15)), 163, 160, 2, self::RED, 'center');
         } elseif ($g->hero->inSuit && $g->shownLife >= 0) {
-            mt_srand($g->tick);
-            for ($i = 0; $i < 7; $i++) {
-                $r->fillRect(148 + $i * 5, 160 + mt_rand(0, 6), 2, 14, self::RED);
-            }
-            for ($i = 0; $i < 24; $i++) {
-                $r->fillRect(146 + mt_rand(0, 36), 152 + mt_rand(0, 20), 2, 1, [0, 255, 255]);
-            }
-            mt_srand();
+            $r->fillRect(143, 157, 41, 23, [0, 0, 0]);
+            $r->copy($this->sdl()->getTexture('scanner-' . $g->tick % self::SCANNER_FRAMES)['texture'], null, 143, 157, 41, 23);
         }
         if ($g->carryingCell) {
             $this->gfx->sprite($r, $g->palette(), 28, 224, 158, 200);

@@ -77,6 +77,12 @@ final class CpcFont implements TextDrawer
         }
     }
 
+    /** One character as #6FBE draws it: the dashboard's signs are small letters ('z' = glyph #2E...). */
+    public function sign(Renderer $r, string $ch, float $x, float $y, Color|array|string $color): void
+    {
+        $this->glyph($r, $this->world->font['chars'][$ch] ?? 0, $x, $y, $color);
+    }
+
     /** Glyph $code (0-127: #6FBE draws the dashboard's graphics with codes 64-127) at view pixels x, y. */
     public function glyph(Renderer $r, int $code, float $x, float $y, Color|array|string $color): void
     {

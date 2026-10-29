@@ -63,6 +63,20 @@ final class Game
     private ?Actor $leader = null;
     /** its missile (the original's first free slot after the room's objects): one at a time */
     private ?Actor $missile = null;
+    /** ticks left of Tal getting into the suit (#5D9E: 12, Tal and the suit flickering), -1: no */
+    public int $entering = -1;
+    private ?Actor $enteringSuit = null;
+    /** the dashboard: lit (pens of the suit), the suit's first start (#604F: the flicker of #8E12) */
+    public bool $dashLit = false;
+    /** the dashboard shows the score and the dial (#6112: after the first time in the suit) */
+    public bool $dashOn = false;
+    /** the bars shown (#5DFC: they follow the values by one a tick); -1: not yet (#5DDA: the suit started) */
+    public int $shownLife = -1;
+    public int $shownEnergy = -1;
+    private int $flickerStep = -1;
+    private int $dyingTicks = 0;
+    /** #8E12: the suit's first start, one bit a tick (1 = lit), 7 bits a byte, 0 = the end */
+    private const FLICKER = [170, 128, 192, 152, 199, 176, 97, 206, 155, 0];
 
     public function __construct(private World $world, array $params = [])
     {
@@ -80,9 +94,12 @@ final class Game
             $this->lives = (int)$params['lives'];
         }
         if (!empty($params['suit'])) {
-            $this->hero->inSuit = true;
+            $this->hero->enterSuit();
             $this->energy = (int)($params['energy'] ?? self::MAX_ENERGY);
             $this->suit = [-1, 0, 0];
+            $this->dashOn = $this->dashLit = true;
+            $this->shownLife = $this->life;
+            $this->shownEnergy = $this->energy;
         }
         $this->enterRoom($this->room);
     }
@@ -125,6 +142,12 @@ final class Game
         }
         if (!$this->hero->inSuit && $this->suit[0] === $room) {
             $this->actors[] = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
+        }
+        foreach ($this->actors as $a) {
+            if ($a->type === 0x29) {             // #7182: a teleporter's room
+                $this->sound('teleport');
+                break;
+            }
         }
         if ($room <= 1) {                       // #7113: the base is irradiated
             if ($this->modules[self::NEGATOR]) {
@@ -199,102 +222,116 @@ final class Game
         if ($h->invulnerable > 0) {
             $h->invulnerable--;
         }
-        if ($h->pose === 'die' || $h->pose === 'rise') {
-            $h->animate();
-            if ($h->poseDone()) {
-                $h->pose === 'die' ? $this->regenerate() : $h->setPose('idle');
+        $this->dashboardTick();
+        if ($h->dying()) {
+            $this->dyingTicks++;
+            if ($h->dyingTick($this->dyingTicks)) {
+                $this->regenerate();
             }
             return;
         }
-        $h->inSuit ? $this->suitTick($in) : $this->footTick($in);
-        $this->roomEdges();
+        if ($this->entering >= 0) {
+            $this->enteringTick();
+        } else {
+            $h->inSuit ? $this->suitTick($in) : $this->footTick($in);
+            $this->roomEdges();
+        }
         foreach ($this->actors as $a) {
             $a->tick($h->x, $h->y);
         }
         $this->missiles();
-        $this->collisions($in);
+        if ($this->entering < 0) {
+            $this->collisions($in);
+        }
         $this->actors = array_values(array_filter($this->actors, fn (Actor $a) => !$a->dead));
         if ($this->tick % self::PERIOD === 0) {
             $this->periodic();
         }
-        if (!$h->inSuit && $this->life <= 0 && !$this->demo) {
+        if (!$h->inSuit && $this->life <= 0 && !$this->demo && $this->entering < 0) {
             $this->die();
         }
-        $h->animate();
+    }
+
+    /** The dashboard: the suit's first start flickers it (#604F), then the bars follow the values (#5DDA). */
+    private function dashboardTick(): void
+    {
+        if ($this->flickerStep >= 0) {
+            $i = $this->flickerStep++;
+            // #605A: the first byte gives its bits 2-7, the next ones their bits 1-7
+            $byte = $i < 6 ? 0 : 1 + intdiv($i - 6, 7);
+            $bit = $i < 6 ? 2 + $i : 1 + ($i - 6) % 7;
+            $value = self::FLICKER[$byte];
+            if ($value === 0) {                  // #6077: the suit is alive
+                $this->flickerStep = -1;
+                $this->shownLife = $this->shownEnergy = 0;
+                $this->say(17);
+                $this->sound('activate');
+            } else {
+                $this->dashLit = (($value >> $bit) & 1) === 1;
+            }
+        }
+        if ($this->shownLife >= 0) {
+            $this->shownLife += $this->life <=> $this->shownLife;
+            $this->shownEnergy += $this->energy <=> $this->shownEnergy;
+        }
     }
 
     private function footTick(array $in): void
     {
         $h = $this->hero;
         $h->flying = false;
-        if (in_array($h->pose, ['throw', 'land'], true) && $h->poseDone()) {
-            $h->setPose('idle');
-        }
-        $busy = in_array($h->pose, ['throw', 'land'], true);
-        if ($h->releasing()) {
+        if ($h->releasing() && !$this->shotFlying()) {
             $this->throwStone();
         }
-        $dir = ($in['right'] ? 1 : 0) - ($in['left'] ? 1 : 0);
-        if (!$busy) {
-            if ($in['down'] && $h->onGround) {
-                $h->setPose('crouch');
-                $dir = 0;
-            } elseif ($in['fire'] && $h->onGround && !$this->shotFlying()) {
-                $h->setPose('throw');
-                $dir = 0;
-            } elseif (($in['jump'] || $in['up']) && $h->onGround) {
-                $h->jump();
-            }
-            if ($dir !== 0) {
-                $h->step($this->room, $dir);
-            }
-            if ($h->onGround && !in_array($h->pose, ['crouch', 'throw'], true) || $h->pose === 'crouch' && !$in['down']) {
-                $h->setPose($dir !== 0 ? 'walk' : 'idle');
-            }
-            if ($h->pose === 'walk' && $h->poseTick % 4 === 0) {
+        foreach ($h->footTick($this->room, $in) as $event) {
+            if ($event === 'down') {
+                $this->changeRoom('down');
+            } elseif ($event === 'land') {
                 $this->sound('step');
             }
         }
-        if ($h->fall($this->room) === 'down') {
-            $this->changeRoom('down');
-        }
-        if (!$h->onGround && $h->pose !== 'throw') {
-            $h->setPose('air');
+        if ($h->footstep()) {
+            $this->sound('step');
         }
     }
 
     private function suitTick(array $in): void
     {
         $h = $this->hero;
-        $dir = ($in['right'] ? 1 : 0) - ($in['left'] ? 1 : 0);
-        $wants = $dir !== 0 || $in['up'] || $in['jump'];
         $h->flying = false;
-        if ($in['suit']) {                        // leave the suit where it stands
-            $this->leaveSuit();
+        if ($in['suit'] && $h->onGround || $h->anim === Hero::SUIT_IN && ($in['left'] || $in['right'])) {
+            $this->leaveSuit();                   // #6150: left / right when it has come down facing the player
             return;
         }
-        $works = $this->modules[self::BOOTS] && $this->energy > 0;
+        $works = $this->modules[self::BOOTS] && $this->energy > 0 && $this->flickerStep < 0;
+        $wants = $in['left'] || $in['right'] || $in['up'] || $in['jump'];
         if (!$works) {
-            if ($wants && !$this->shownInert) {
+            if ($wants && !$this->shownInert && $this->flickerStep < 0) {
                 $this->say($this->energy <= 0 ? 16 : 13);
                 $this->shownInert = true;
             }
         } else {
             $this->shownInert = false;
-            if ($dir !== 0) {
-                $h->step($this->room, $dir);
+            $moves = $h->suitControl($in);
+            if ($moves & 4) {
+                $h->step($this->room, -1);
+            } elseif ($moves & 8) {
+                $h->step($this->room, 1);
             }
-            if ($in['up'] || $in['jump']) {       // the boots: thrust, costs energy
-                $h->flying = true;
+            // the boots: the suit hangs in the air (up / down move it) until it comes down on the ground
+            $h->flying = $h->anim !== Hero::SUIT_IN;
+            if ($moves & 1) {
                 $h->rise = -1;
-                $h->y -= 3;
+                $h->up($this->room, 3);
                 $h->onGround = false;
                 $h->fallIndex = 0;
-                if ($this->tick % 8 === 0) {
-                    $this->useEnergy(1);
-                }
+            } elseif ($moves & 2 && $h->descend($this->room, 3)) {
+                $h->suitLanded();
+                $h->flying = false;
             }
-            $h->setPose($dir !== 0 ? 'walk' : 'idle');
+            if ($moves !== 0 && $this->tick % 8 === 0) {
+                $this->useEnergy(1);
+            }
         }
         if ($in['fire']) {
             if (!$this->modules[self::PULSE]) {
@@ -303,7 +340,7 @@ final class Game
                 $this->fireBeam();
             }
         }
-        if ($h->fall($this->room) === 'down') {
+        if ($h->fall($this->room) === 'down') {   // inert, or settled: it falls
             $this->changeRoom('down');
         }
     }
@@ -404,14 +441,15 @@ final class Game
         return false;
     }
 
+    /** #6905 / #6910: the stone leaves at frame 5 of the throw, 6 lines down, and flies an arc (program 1 or 2). */
     private function throwStone(): void
     {
         $h = $this->hero;
-        $a = new Actor($this->world, 0x2C, $h->x + ($h->facing > 0 ? 5 : 0), $h->y + 12);
+        $right = $h->facing > 0;
+        $a = new Actor($this->world, 0x2C, $h->x + ($right ? 6 : -2), $h->y + 6, $right ? 1 : 2);
         $a->kind = Actor::SHOT;
         $a->damage = 1;                           // #5D2B: a stone takes one hit, the pulse beam two
-        $a->life = 12;
-        $a->setMotion($h->facing > 0 ? 8 : 4, 3, 0);
+        $a->life = 60;
         $this->actors[] = $a;
         $this->sound('shoot');
     }
@@ -470,9 +508,10 @@ final class Game
                 case Actor::ITEM:
                     $this->take($a, $in);
                     break;
-                case Actor::SUIT:
-                    if (($in['suit'] || $in['down']) && $this->suitCooldown === 0) {
+                case Actor::SUIT:                 // #6094: Tal standing facing the player gets in
+                    if (($h->facingPlayer() || $in['suit']) && $h->onGround && $this->suitCooldown === 0 && $this->life > 0) {
                         $this->enterSuit($a);
+                        return;
                     }
                     break;
                 case Actor::TELEPORT:             // #5ABD: back to the suit
@@ -506,7 +545,7 @@ final class Game
             if ($this->hazardCooldown > 0) {
                 return;
             }
-            if ($a->type === 0x2F && !$h->inSuit && $h->pose === 'crouch') {
+            if ($a->type === 0x2F && !$h->inSuit && $h->crouched()) {
                 return;                           // #5B36: the hanging beast misses a crouching Tal
             }
             $this->hazardCooldown = 8;            // #5CD1
@@ -532,10 +571,12 @@ final class Game
     {
         $e->hits -= $damage;
         $e->flash = 3;
-        $this->sound('hit');
-        if ($e->hits <= 0) {
+        if ($e->hits <= 0) {                      // #5D4C: it dies (#13), else it is hit (#1E)
             $this->explode($e);
             $this->score += $e->points * 10;
+            $this->sound('hurt');
+        } else {
+            $this->sound('hit');
         }
     }
 
@@ -549,9 +590,8 @@ final class Game
 
     private function die(): void
     {
-        $h = $this->hero;
-        $h->setPose('die');
-        $h->rise = -1;
+        $this->hero->die();
+        $this->dyingTicks = 0;
         $this->sound('death');
     }
 
@@ -566,8 +606,7 @@ final class Game
         }
         $this->say([1 => 5, 2 => 4, 3 => 3][$this->lives] ?? 2);
         $h = $this->hero;
-        $h->setPose('rise');
-        $h->animate();
+        $h->getUp();
         $this->life = self::MAX_LIFE;
         if ($this->room <= 1 && !$this->modules[self::NEGATOR]) {
             // the base kills at once without the negator: get up in the suit's room instead
@@ -580,7 +619,7 @@ final class Game
     private function take(Actor $a, array $in): void
     {
         $h = $this->hero;
-        if (!$h->inSuit && !($in['down'] && $h->onGround)) {     // #5D85: crouch to pick it up
+        if (!$h->inSuit && !$h->pickingUp()) {    // #5D85: going down on his knees picks it up
             return;
         }
         if ($a->itemIndex >= 100) {
@@ -605,33 +644,59 @@ final class Game
         $this->sound('pickup');
     }
 
+    /** #6094: Tal fades into the suit (12 ticks, both flickering), then it is his (#60D3). */
     private function enterSuit(Actor $a): void
     {
+        $this->entering = 12;
+        $this->enteringSuit = $a;
+        $this->sound('enter');
+    }
+
+    private function enteringTick(): void
+    {
+        if (--$this->entering > 0) {
+            return;
+        }
+        $this->entering = -1;
         $h = $this->hero;
-        $a->dead = true;
-        $h->inSuit = true;
-        $h->x = $a->x;
-        $h->y = min($h->y, $a->y);
-        $h->setPose('idle');
+        $a = $this->enteringSuit;
+        $this->enteringSuit = null;
+        if ($a !== null) {
+            $a->dead = true;
+            $h->x = $a->x;
+            $h->y = $a->y - 1;
+        }
+        $h->enterSuit();
+        $h->onGround = true;
         $this->suit = [-1, 0, 0];
+        $this->dashLit = true;                    // #61BB: the suit's pens light up
         if ($this->carryingCell) {
             $this->carryingCell = false;
             $this->refill();
         }
-        $this->say(17);
-        $this->sound('suit');
+        if (!$this->dashOn) {                     // #611C: the first time, the dashboard starts
+            $this->dashOn = true;
+            $this->flickerStep = 0;
+            $this->say(17);
+            $this->sound('suit');
+        }
     }
 
+    /** #6150: the suit stays where it stands, Tal steps out of it facing the player. */
     private function leaveSuit(): void
     {
+        if (self::zone($this->room) >= 5) {
+            $this->say(21);                       // #61B5: no getting out in the base
+            return;
+        }
         $h = $this->hero;
         $h->inSuit = false;
         $h->flying = false;
-        $this->suit = [$this->room, $h->x, $h->y];
-        $this->actors[] = new Actor($this->world, 0x36, $h->x, $h->y);
-        $h->x = $h->facing > 0 ? min(66, $h->x + 7) : max(8, $h->x - 7);
-        $h->setPose('idle');
-        $h->invulnerable = 6;
-        $this->suitCooldown = 6;
+        $this->suit = [$this->room, $h->x, $h->y + 1];
+        $this->actors[] = new Actor($this->world, 0x36, $h->x, $h->y + 1);
+        $h->stand();
+        $this->suitCooldown = 40;                 // #6180: #B517 = #28
+        $this->dashLit = false;                   // #61D2
+        $this->sound('enter');
     }
 }

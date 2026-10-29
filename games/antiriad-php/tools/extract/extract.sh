@@ -34,9 +34,11 @@ run game 1300 "${GAMEPLAY[@]}" -k '1000:joy_right+,1290:joy_right-' -d 1290
 mkdir -p "$ASSETS"
 python3 -I "$HERE/export.py" "$D2J/tools" "$WORK/game/dump-01290.bin" "$ASSETS"
 
-ogg() {  # ogg <psg.bin> <from> <to> <out.ogg>: AY log -> mono Ogg
+ogg() {  # ogg <psg.bin> <from> <to> <out.ogg> [trim]: AY log -> mono Ogg (trim: the silent end cut off)
   python3 -I "$PSG" render "$1" "$2" "$3" "$WORK/tmp.wav" >/dev/null
-  ffmpeg -loglevel error -y -i "$WORK/tmp.wav" -af apad=pad_dur=0.15 -ac 1 -c:a libvorbis -q:a 2 "$4"   # padded: Vorbis drops a lone 80 ms
+  local af=apad=pad_dur=0.15                                  # padded: Vorbis drops a lone 80 ms
+  [ "${5:-}" = trim ] && af="areverse,silenceremove=start_periods=1:start_threshold=-55dB,areverse,$af"
+  ffmpeg -loglevel error -y -i "$WORK/tmp.wav" -af "$af" -ac 1 -c:a libvorbis -q:a 2 "$4"
 }
 
 echo "title music..."
@@ -60,17 +62,20 @@ sound() {  # sound <name> <frames> "ch:id ..."
   run "snd-$name" $((1101 + frames + 10)) "${GAMEPLAY[@]}" "${args[@]}" -F 1100:a630=00 -F 1101:54fb=00 -F 1101:54fc=a6
   local out="$ASSETS/sfx/$name.ogg"
   case $name in victory|death) out="$ASSETS/music/$name.ogg";; esac
-  ogg "$WORK/snd-$name/psg.bin" 1101 $((1101 + frames)) "$out"
+  ogg "$WORK/snd-$name/psg.bin" 1101 $((1101 + frames)) "$out" "${4:-}"
 }
 echo "sound effects..."
-sound shoot 40 "0:0b"          # #6567: a stone / a pulse beam leaves
+sound shoot 40 "0:0b"          # #6567: a pulse beam leaves (a stone is silent)
 sound pickup 14 "0:0c"         # #5A07: an object is taken
-sound hurt 50 "0:13"           # #5BE1: Tal (or the suit) is hit
+sound hurt 50 "0:13"           # #5BE1: Tal (or the suit) is hit, #5D4F: an enemy dies
 sound hit 4 "0:1e"             # #5D44: an enemy is hit
-sound step 4 "0:15"            # #555B: a footstep / landing
+sound step 4 "0:15"            # #555B: a footstep (walk frames 0 and 4) / #6642: landing
 sound beam 26 "0:16"           # #5C06: the suit crosses an energy beam
 sound suit 60 "0:04"           # #6147: the suit comes to life
 sound message 25 "0:07"        # #5EF7: a message starts
+sound enter 60 "1:0e 2:0f" trim     # #60C4 / #61A6: Tal gets into / out of the suit
+sound activate 120 "0:05 1:06" trim # #6085: the suit is brought to life (the boots)
+sound teleport 60 "2:0d" trim       # #7184: a room with a teleporter (#29)
 sound death 82 "0:10 1:11 2:12"        # #5816: Tal dies
 sound victory 1150 "0:17 1:18 2:19"    # #5C3E: the base is destroyed
 echo "done: $ASSETS"

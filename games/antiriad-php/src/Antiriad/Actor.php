@@ -166,7 +166,7 @@ final class Actor
             $this->x += $this->dx;
         }
         if ($this->kind === self::SHOT) {
-            if ($this->x < 0 || $this->x + $w > 80) {
+            if ($this->x < 0 || $this->x + $w > 80 || $this->y >= World::BOTTOM) {
                 $this->dead = true;
             }
             return;

@@ -77,6 +77,12 @@ final class CpcFont implements TextDrawer
         }
     }
 
+    /** Glyph $code (0-127: #6FBE draws the dashboard's graphics with codes 64-127) at view pixels x, y. */
+    public function glyph(Renderer $r, int $code, float $x, float $y, Color|array|string $color): void
+    {
+        $r->copy($this->strip(Color::of($color)), [$code * 8, 0, 8, 8], $x, $y, 8, 8);
+    }
+
     public function width(string $text, float $scale = 1): int
     {
         $lines = explode("\n", $this->normalize($text));

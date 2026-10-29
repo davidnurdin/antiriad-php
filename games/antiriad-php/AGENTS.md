@@ -23,7 +23,7 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
 - **Assets** (`assets/`, ignored by git: the original's data) are rebuilt by `tools/extract/extract.sh`:
   `rooms/room-NN.png` (320 x 128 with the neighbours' edge columns), `sprites/sprites-PP.png` (one sheet per
   room palette), `hud/hud.png`, `data/world.json` (exits, ground and wall masks, objects, animations,
-  programs, types, items, messages, font), `title/title.png`, `music/*.ogg`, `sfx/*.ogg`. On the playground they are private files.
+  programs, types, items, messages, font), `title/title.png`, `hud/hud-lit.png`, `sprites/sprites-PP-lit.png`, `music/*.ogg`, `sfx/*.ogg`. On the playground they are private files.
 - **Units**: the original's. x in screen bytes (0-79, 4 view pixels), y in lines (50 = top of the
   playfield, 178 = under it). View 320 x 200: playfield 0-127, dashboard 128-199.
 - **Scenes**: `TitleScene` (the original's title screen, `assets/title/title.png`, credits rewritten translated except in Spanish; fire starts, Escape = options) → `PlayScene` (the game; `GAME OVER` /
@@ -34,8 +34,18 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   engine's font), `Ticker` (message line), `Messages` (fr / en through config/lang.yaml, es = the disc's texts).
 - **Rules**: see the doc block of `Game`. Modules: 0 boots (room 43), 1 pulse beam (33), 2 mine (20),
   3 negator (6). Suit in room 63. The core is in room 0.
+- **Tal on foot** is the original's automaton (`Hero::NEXT` = #8F4B): standing sideways, turning round
+  through the pose facing the player (#01), walking, crouching (= picking up), throwing (the stone flies
+  an arc: programs 1 / 2), jumping (up standing; fire / up walking: forward), landing. The ceiling stops
+  a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in.
+- **The suit**: #17 (just in / come down facing the player: left / right steps out), #16, #18-#1B; with
+  the boots it hangs in the air, up / down move it. The first time in, the dashboard starts (#8E12
+  flicker, then score, dial, bars a unit a tick); it is lit (`hud-lit.png`, `sprites-PP-lit.png`: pens
+  13-15 of the suit) while Tal is inside.
 - **Controls** (`config/input.yaml`): arrows, up / Z = jump (thrust in the suit), Space = throw / fire,
-  down = crouch / pick up / enter the suit, E = in / out of the suit, Escape = pause.
+  down = crouch / pick up, E = in / out of the suit (also), Escape = pause.
 - **Test params** of `PlayScene`: `room`, `x`, `y`, `suit`, `energy`, `modules` (list), `lives`, `demo`.
 - **Sprites** face left in the sheets; bit 7 mirrors them (facing right). #73F0 mirrors sprite bytes in place (state in #93B2): export.py turns them back.
+- **Sounds** where the original plays them (`tools/extract/extract.sh`): steps on walk frames 0 and 4
+  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room...
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

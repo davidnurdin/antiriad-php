@@ -18,7 +18,7 @@ final class World
 
     private static ?self $instance = null;
 
-    /** @var array<int, array{exits: array<string, ?int>, palette: int, ground: list<string>, walls: list<string>, objects: list<list<int>>}> */
+    /** @var array<int, array{exits: array<string, ?int>, palette: int, ground: list<string>, walls: list<string>, ceiling: list<string>, objects: list<list<int>>}> */
     public array $rooms;
     /** @var list<array{x: int, y: int, w: int, h: int, colour: int}> */
     public array $sprites;
@@ -67,6 +67,22 @@ final class World
     public function exit(int $room, string $side): ?int
     {
         return $this->rooms[$room]['exits'][$side] ?? null;
+    }
+
+    /** Pen 1 or 5 on a line of the playfield's first 8 (x0..x1 in mode 0 pixels): the ceiling test of #6714. */
+    public function ceilingAt(int $room, int $line, int $x0, int $x1): bool
+    {
+        $screen = $line - self::TOP;
+        if ($screen < 0 || $screen >= 8) {
+            return false;
+        }
+        $row = $this->rooms[$room]['ceiling'][$screen];
+        for ($x = max(0, $x0); $x <= min(159, $x1); $x++) {
+            if ($row[$x] === '1') {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Pen 3 or 7 on the line under (x0..x1 in mode 0 pixels, 0-159): the ground test of #68B4. */

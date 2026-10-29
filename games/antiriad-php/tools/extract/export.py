@@ -118,6 +118,12 @@ def ground_rows(pens):
     return [''.join('1' if (pens[ty * 8][x] & 0b1011) == 3 else '0' for x in range(160)) for ty in range(16)]
 
 
+def ceiling_rows(pens):
+    """#66CE / #6714: rising, Tal's head (y+7) is tested only above line #3A, the playfield's first 8 lines:
+    a pixel of pen 1 or 5 there stops him (the test masks pen bit 2). One string of 160 per line 0-7."""
+    return [''.join('1' if (pens[y][x] & 0b1011) == 1 else '0' for x in range(160)) for y in range(8)]
+
+
 def wall_rows(pens):
     """#67B6: Tal stops at a screen byte with a pixel of pen 7 in the column he walks into. One hex string
     of 80 bits (the screen bytes, bit 7 of the first digit = byte 0) per line."""
@@ -218,6 +224,7 @@ def main():
             'palette': pi,
             'ground': ground_rows(pens),
             'walls': wall_rows(pens),
+            'ceiling': ceiling_rows(pens),
             'objects': [list(m[p + 1 + 4 * k:p + 5 + 4 * k]) for k in range(m[p])],
         })
 
@@ -232,8 +239,11 @@ def main():
         x += w + 1
         rowh = max(rowh, h)
     sheet_h = y + rowh
-    for pi in range(14):
-        pal = palette(pi)
+    # pens 13-15 are the suit's: #61BB lights them (#8E06) when Tal is inside, #61D2 puts them out (#8E03)
+    for pi, lit in [(pi, lit) for pi in range(14) for lit in (False, True)]:
+        pal = list(palette(pi))
+        if lit:
+            pal[13:16] = list(m[0x8E06:0x8E09])
         img = Image.new('RGBA', (512, sheet_h), (0, 0, 0, 0))
         px = img.load()
         for n, pens in enumerate(all_pens):
@@ -244,7 +254,7 @@ def main():
                         rgb = HW[pal[pen]]
                         px[s['x'] + xx * 2, s['y'] + yy] = rgb + (255,)
                         px[s['x'] + xx * 2 + 1, s['y'] + yy] = rgb + (255,)
-        img.save(f'{OUT}/sprites/sprites-{pi:02d}.png')
+        img.save(f'{OUT}/sprites/sprites-{pi:02d}' + ('-lit' if lit else '') + '.png')
     world['sprites'] = sprites
 
     world['anims'] = [anim(i) for i in range(0x40)]
@@ -257,9 +267,9 @@ def main():
     world['start'] = [[0x38, 0x14, 0x57], [0x44, 0x24, 0x57]]   # #58DF / #7506: room 56 or 68
     world['messages'] = [text(i) for i in range(22)]
 
-    # font: glyph codes 0-63, mode 1 (pen 1 = ink); characters -> codes as #6FBE does
+    # font: glyph codes 0-127, mode 1 (pen 1 = ink); characters -> codes as #6FBE does
     glyphs = []
-    for code in range(64):
+    for code in range(128):        # 0-63: letters, digits, signs; 64-127: the dashboard's graphics (#6FBE)
         rows = []
         for yy in range(8):
             a = FONT + code * 16 + yy * 2
@@ -275,7 +285,16 @@ def main():
         json.dump(world, f, separators=(',', ':'))
 
     # the dashboard (mode 1, its own palette): the screen under the playfield
-    dump.screen().crop((0, 128, 320, 200)).save(f'{OUT}/hud/hud.png')
+    hud = dump.screen().crop((0, 128, 320, 200)).convert('RGB')
+    hud.save(f'{OUT}/hud/hud.png')
+    # lit up by the suit (seen in the emulator): blue -> sky blue, bright blue -> bright cyan
+    lit = {(0, 0, 128): (0, 128, 255), (0, 0, 255): (0, 255, 255)}
+    on = hud.copy()
+    px = on.load()
+    for yy in range(on.height):
+        for xx in range(on.width):
+            px[xx, yy] = lit.get(px[xx, yy], px[xx, yy])
+    on.save(f'{OUT}/hud/hud-lit.png')
 
 
 main()

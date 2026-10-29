@@ -28,23 +28,26 @@ final class Gfx
         $r->copy($this->texture(sprintf('room-%02d', $room), sprintf('assets/rooms/room-%02d.png', $room)), null, 0, $y);
     }
 
-    public function hud(Renderer $r, float $y = 128): void
+    /** The dashboard, dark, or lit by the suit (pens 9-11: #61E9 / #61F8). */
+    public function hud(Renderer $r, float $y = 128, bool $lit = false): void
     {
-        $r->copy($this->texture('hud', 'assets/hud/hud.png'), null, 0, $y);
+        $name = $lit ? 'hud-lit' : 'hud';
+        $r->copy($this->texture($name, "assets/hud/$name.png"), null, 0, $y);
     }
 
     /**
      * Sprite $id at view pixels ($x, $y). Bit 7 of the id = mirrored (#73F0): the sheet faces left.
-     * $clipBottom: lines under it are not drawn (the dashboard).
+     * $clipBottom: lines under it are not drawn (the dashboard). $lit: pens 13-15 lit (the suit with Tal, #61BB).
      */
-    public function sprite(Renderer $r, int $palette, int $id, float $x, float $y, float $clipBottom = 128): void
+    public function sprite(Renderer $r, int $palette, int $id, float $x, float $y, float $clipBottom = 128, bool $lit = false): void
     {
         $s = $this->world->sprites[$id & 0x7F];
         $h = min($s['h'], (int)floor($clipBottom - $y));
         if ($h <= 0 || $s['w'] === 0) {
             return;
         }
-        $tex = $this->texture(sprintf('sprites-%02d', $palette), sprintf('assets/sprites/sprites-%02d.png', $palette));
+        $name = sprintf('sprites-%02d', $palette) . ($lit ? '-lit' : '');
+        $tex = $this->texture($name, "assets/sprites/$name.png");
         $r->copy($tex, [$s['x'], $s['y'], $s['w'], $h], (int)round($x), (int)round($y), $s['w'], $h, ($id & 0x80) !== 0);
     }
 

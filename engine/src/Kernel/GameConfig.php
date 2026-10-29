@@ -14,6 +14,7 @@ final class GameConfig
         'title' => 'JumPHP game',
         'version' => '0.1.0',
         'description' => '',
+        'descriptions' => [],    // the description per language {fr: ..., en: ...}: the playground shows the visitor's
         'width' => 320,          // virtual resolution: everything is drawn at this size, then scaled
         'height' => 180,
         'scale' => 3,            // initial window size = width * scale (desktop)

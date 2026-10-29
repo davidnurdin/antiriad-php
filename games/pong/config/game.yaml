@@ -4,6 +4,9 @@ game:
   title: "PONG"
   version: 1.0.0
   description: "The classic, in PHP: against the computer, two players on one keyboard, or online."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Le classique, en PHP : contre l'ordinateur, à deux sur un clavier, ou en ligne."
+    en: "The classic, in PHP: against the computer, two players on one keyboard, or online."
   width: 320
   height: 180
   scale: 3

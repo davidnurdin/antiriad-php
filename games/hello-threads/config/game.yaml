@@ -5,6 +5,9 @@ game:
   title: "HELLO THREADS"
   version: 0.1.0
   description: "A fractal computed by a pool of PHP threads (TrueAsync), while the main loop keeps drawing."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Une fractale calculée par un pool de threads PHP (TrueAsync), pendant que la boucle principale continue de dessiner."
+    en: "A fractal computed by a pool of PHP threads (TrueAsync), while the main loop keeps drawing."
   width: 320
   height: 180
   scale: 3

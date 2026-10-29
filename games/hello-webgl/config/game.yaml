@@ -6,6 +6,9 @@ game:
   title: "HELLO WEBGL"
   version: 0.1.0
   description: "3D cubes and post-processing shaders (CRT, wave, 4 colours) from PHP, with WebGL in the browser."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Des cubes 3D et des shaders de post-traitement (CRT, vague, 4 couleurs) depuis PHP, avec WebGL dans le navigateur."
+    en: "3D cubes and post-processing shaders (CRT, wave, 4 colours) from PHP, with WebGL in the browser."
   width: 320
   height: 180
   scale: 3

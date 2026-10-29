@@ -4,6 +4,9 @@ game:
   title: "BREAKOUT"
   version: 1.0.0
   description: "Break the wall of bricks with a bouncing ball: 3 lives, a new wall every level."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Cassez le mur de briques avec une balle qui rebondit : 3 vies, un nouveau mur à chaque niveau."
+    en: "Break the wall of bricks with a bouncing ball: 3 lives, a new wall every level."
   width: 320
   height: 240
   scale: 3                      # desktop window = 960 x 720

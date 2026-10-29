@@ -6,6 +6,9 @@ game:
   title: "JUMPBALL PHP"
   version: 0.1.0
   description: "A 3D runner in PHP + WebGL: the ball rolls faster and faster, steer and jump over the holes."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Un runner 3D en PHP + WebGL : la balle roule de plus en plus vite, dirigez-la et sautez par-dessus les trous."
+    en: "A 3D runner in PHP + WebGL: the ball rolls faster and faster, steer and jump over the holes."
   width: 320
   height: 180
   scale: 3

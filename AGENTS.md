@@ -192,6 +192,7 @@ Replace its scenes and entities with your game:
    | Key | Default | |
    |---|---|---|
    | `id`, `title`, `version`, `description` | | identity (page title, `game.json` for the portal) |
+   | `descriptions` | {} | the description per language, `{fr: '…', en: '…'}`: the playground shows the visitor's (fill both) |
    | `width`, `height` | 320, 180 | virtual resolution (classic: 320×180, 256×224, 256×192, 320×240) |
    | `scale` | 3 | desktop window = width × scale |
    | `integer_scale` | false | scale by whole factors only (sharper, bigger black borders) |

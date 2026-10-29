@@ -5,6 +5,9 @@ game:
   title: "HELLO WORLD"
   version: 1.0.0
   description: "The smallest JumPHP game: a menu, a text that moves, a sound. The start of the tutorials."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Le plus petit jeu JumPHP : un menu, un texte qui bouge, un son. Le point de départ des tutoriels."
+    en: "The smallest JumPHP game: a menu, a text that moves, a sound. The start of the tutorials."
   width: 320                    # virtual resolution (pixels of the game, scaled to the window)
   height: 180
   scale: 3                      # desktop window = 960 x 540

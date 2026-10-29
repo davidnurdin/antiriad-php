@@ -1,0 +1,20 @@
+# Hello world: the smallest JumPHP game with a menu, a text and a sound. Every key is optional
+# (defaults: JumPHP\Kernel\GameConfig::DEFAULTS).
+game:
+  id: hello-world
+  title: "HELLO WORLD"
+  version: 1.0.0
+  description: "The smallest JumPHP game: a menu, a text that moves, a sound. The start of the tutorials."
+  width: 320                    # virtual resolution (pixels of the game, scaled to the window)
+  height: 180
+  scale: 3                      # desktop window = 960 x 540
+  background: [16, 16, 40]
+  start_scene: App\Scene\TitleScene
+  lang: en
+  controls: "Arrows: move the text · Space / Enter: a sound · Esc: back"
+  # the buttons of the phone's pad
+  touch: { a: Space, b: Escape, start: Return }
+  # what `bin/jumphp test` runs headless (no window), 600 frames = 10 s of game time
+  smoke:
+    scene: App\Scene\HelloScene
+    params: { demo: true }

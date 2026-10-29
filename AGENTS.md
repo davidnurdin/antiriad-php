@@ -789,8 +789,10 @@ Claude Code (the page shows the command, `claude mcp add --transport http --scop
 `list_game_files`, `read_game_file`. The server's instructions say the same as this section.
 
 To make a game for the user on the playground:
-1. `create_project` (title, description, category, brief = the user's request); `get_project` until its status
-   is no longer `creating`. It made the repository from this version of JumPHP with the skeleton game and
+1. `create_project` (title, description, category, `kind`, brief = the user's request); `get_project` until its
+   status is no longer `creating`. `kind`: `original` (a new game), `cpc` (the remake of an Amstrad CPC game
+   from its `.dsk`: made with dsk2jumphp, §12; ask the user for the path of their disc), `port` (a port of a game
+   whose source code exists). It made the repository from this version of JumPHP with the skeleton game and
    `BRIEF.md`.
 2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only.
 3. Its home page `games/<id>/site/` (§13) and `games/<id>/assets/thumbnail.png` (the directory's picture,
@@ -809,10 +811,16 @@ What the playground publishes and how:
   player's browser);
 - the site is served as the game's page (framed, on a separate origin); `{{DOMAIN}}` there = `<playground>/<game>`;
 - limits: 4000 files, 120 MB in all, 20 MB per file; no symbolic links;
+- files that may not be public (the data of an original game): keep them out of git and give them to the
+  playground as **private files** (Studio → the project → "Fichiers privés"): the game loads them, no
+  repository, source page or fork holds them;
+- a game without a picture of its own is photographed by the playground (its screen, in a browser);
 - never put the MCP token or any secret in the repository.
 
 ## 15. Reference
 
+- `games/hello-world/` — the smallest game: a menu (play, sound on / off, quit), a text moved by the arrows, a
+  Synth sound. The start of the playground's tutorials.
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
 - `games/hello-webgl/` — WebGL / OpenGL: 3D cubes under a 2D HUD, post-processing shaders, raw gl* + OpenAL (`RawGlScene`),

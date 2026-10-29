@@ -1,0 +1,11 @@
+{
+  "name": "jumphp",
+  "owner": { "name": "David Nurdin" },
+  "plugins": [
+    {
+      "name": "jumphp-live",
+      "source": "./claude-mod/jumphp-live",
+      "description": "JumPHP beside the chat: bin/jumphp test live, the screenshots, the playground's PHPUnit runs; rerun, capture or tell Claude from the pane"
+    }
+  ]
+}

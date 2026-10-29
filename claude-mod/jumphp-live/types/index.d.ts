@@ -1,0 +1,38 @@
+/** One step of `bin/jumphp test`: php -l, phpstan, phpunit, the headless smoke test. */
+export type Stage = { name: string; status: 'run' | 'ok' | 'fail' }
+
+/** The last `bin/jumphp` command seen (Claude's, or one started from the pane). */
+export type Check = {
+  game: string
+  kind: string
+  by: 'claude' | 'you'
+  status: 'running' | 'passed' | 'failed'
+  stages: Stage[]
+  /** the end of its output, as it comes */
+  log: string
+  /** PHPUnit's last line (OK (…) / Tests: …), if any */
+  summary: string
+  /** what failed: PHPUnit's failed tests, PHP warnings and errors */
+  failures: string[]
+  at: number
+}
+
+/** A picture of the game: from `bin/jumphp shot` / `siteshot`, or one Claude read. */
+export type Shot = { path: string; at: number; n: number }
+
+/** The playground's last answer about the game (MCP run_tests / get_test_run / sync_project). */
+export type Remote = { tool: string; status: string; detail: string; at: number }
+
+/** The project's root (where bin/jumphp is) and the game the buttons act on. */
+export type Where = { root: string; game: string }
+
+declare module 'claude-code' {
+  interface PluginState {
+    'jumphp-live': {
+      check: Shaped<Check | null>
+      shots: Shaped<Shot[]>
+      remote: Shaped<Remote | null>
+      where: Shaped<Where>
+    }
+  }
+}

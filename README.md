@@ -157,6 +157,19 @@ Contraintes du navigateur (détaillées dans [docs/navigateur.md](docs/navigateu
 frame (`sleep`, boucles infinies), entiers 32 bits, réseau uniquement via `JumPHP\Net` et `JumPHP\Http`, fichiers écrits
 seulement dans `var/`.
 
+### Avec Claude Code : le panneau JumPHP
+
+Le mod `jumphp-live` (`claude-mod/jumphp-live/`) ajoute à Claude Code un panneau à côté de la conversation : les
+vérifications de `bin/jumphp test` en direct (✔ / ✘ par étape, les tests PHPUnit en échec), les captures que
+Claude prend et regarde, les tests du playground ; des boutons pour relancer les tests, prendre une capture, ou
+demander une correction à Claude, et un champ pour lui écrire. À taper dans Claude Code :
+
+```
+/plugin install jumphp-live --marketplace davidnurdin/jumPhp
+```
+
+puis `/jumphp <jeu>` dans le projet.
+
 ### Documentation
 
 - [AGENTS.md](AGENTS.md) : le guide complet (anglais), pour les humains comme pour les IA
@@ -324,6 +337,19 @@ breaker was written that way, by an AI that had only read this file.
 
 Browser constraints (see [AGENTS.md](AGENTS.md) §2): never block the frame (`sleep`, endless loops), 32-bit
 integers, network only through `JumPHP\Net`, write files only into `var/`.
+
+### With Claude Code: the JumPHP pane
+
+The `jumphp-live` mod (`claude-mod/jumphp-live/`) gives Claude Code a pane beside the conversation: the checks of
+`bin/jumphp test` live (✔ / ✘ per step, the failing PHPUnit tests), the screenshots Claude takes and looks at, the
+playground's test runs; buttons to run the tests again, take a screenshot or ask Claude for a fix, and a field to
+write to it. In Claude Code:
+
+```
+/plugin install jumphp-live --marketplace davidnurdin/jumPhp
+```
+
+then `/jumphp <game>` in the project.
 
 ### Documentation
 

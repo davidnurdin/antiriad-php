@@ -141,6 +141,7 @@ final class Game
             }
             [$x, $y, $program, $type] = $o;
             $a = new Actor($this->world, $type, $x, $y, $program);
+            $a->appear();                         // #6A50: every object comes in through the masks
             $this->actors[] = $a;
             if ($type === 0x29) {
                 $this->teleporter = $a;
@@ -152,6 +153,7 @@ final class Game
         foreach ($this->world->cells as $i => [$r, $x, $y]) {
             if ($r === $room && empty($this->cellsTaken[$i])) {
                 $a = new Actor($this->world, 0x1C, $x, $y);
+                $a->appear();
                 $a->itemIndex = $i;
                 $this->actors[] = $a;
             }
@@ -159,12 +161,15 @@ final class Game
         foreach ($this->world->modules as $i => [$r, $x, $y]) {
             if ($r === $room && !$this->modules[$i]) {
                 $a = new Actor($this->world, 0x1D + $i, $x, $y);
+                $a->appear();
                 $a->itemIndex = 100 + $i;
                 $this->actors[] = $a;
             }
         }
         if (!$this->hero->inSuit && $this->suit[0] === $room) {
-            $this->actors[] = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
+            $a = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
+            $a->appear();
+            $this->actors[] = $a;
         }
         $this->hum = $this->teleporter !== null;  // #7184: a teleporter hums (#0D) as long as it is there
         if ($room <= 1) {                       // #7113: the base is irradiated
@@ -222,21 +227,25 @@ final class Game
         if ($t === null) {
             return;
         }
-        if ($t->dead) {
-            $this->teleporter = null;
-            $this->pending = [];
-            $this->hum = false;
+        if ($this->teleportIn > 0) {
+            if ($t->dead || $t->fade < 0) {       // shot down (or faded) before: nothing comes
+                $this->teleporter = null;
+                $this->pending = [];
+                $this->hum = false;
+            } elseif (--$this->teleportIn === 0) {
+                $t->vanish();                     // #626D: it fades away (12 turns)...
+            }
             return;
         }
-        if (--$this->teleportIn > 0) {
+        if (!$t->dead) {
             return;
         }
-        $t->dead = true;
-        $this->teleporter = null;
+        $this->teleporter = null;                 // ...then the others come in its slot (#7192), appearing
         $this->hum = false;
         $first = null;
         foreach ($this->pending as [$x, $y, $program, $type]) {
             $a = new Actor($this->world, $type, $x, $y, $program);
+            $a->appear();
             $first ??= $a;
             $this->actors[] = $a;
         }
@@ -550,15 +559,18 @@ final class Game
             }
             if ($a->kind === Actor::SHOT) {
                 foreach ($this->actors as $e) {
-                    if ($e->kind === Actor::ENEMY && !$e->dead && self::overlap($a->box(), $e->box())) {
+                    if ($e->kind === Actor::ENEMY && !$e->dead && !$e->fading() && self::overlap($a->box(), $e->box())) {
                         $this->hitEnemy($e, $a->damage);
-                        $a->dead = true;
+                        $a->dead = true;              // #5D6F: the shot bursts (#2D) where it is
+                        $fx = new Actor($this->world, 0x2D, $a->x, max(World::TOP, $a->y - 4));
+                        $fx->kind = Actor::FX;
+                        $this->actors[] = $fx;
                         break;
                     }
                 }
                 continue;
             }
-            if (!$a->visible() || !self::overlap($hb, $a->box())) {
+            if ($a->fading() || !$a->visible() || !self::overlap($hb, $a->box())) {
                 continue;
             }
             switch ($a->kind) {
@@ -629,7 +641,7 @@ final class Game
         $h->invulnerable = 3;
         $this->sound('hurt');
         if ($a->kind === Actor::ENEMY) {
-            $this->explode($a);
+            $a->vanish();                         // #5BED: it fades away
         }
     }
 
@@ -638,20 +650,12 @@ final class Game
         $e->hits -= $damage;
         $e->flash = 3;
         if ($e->hits <= 0) {                      // #5D4C: it dies (#13), else it is hit (#1E)
-            $this->explode($e);
-            $this->score += $e->points * 10;
+            $e->vanish();
+            $this->score += ($damage === 1 ? $e->points : $e->points >> 1) * 10;   // #5D54: half with the beam
             $this->sound('hurt');
         } else {
             $this->sound('hit');
         }
-    }
-
-    private function explode(Actor $e): void
-    {
-        $e->dead = true;
-        $fx = new Actor($this->world, 0x2D, $e->x, $e->y);
-        $fx->kind = Actor::FX;
-        $this->actors[] = $fx;
     }
 
     private function die(): void

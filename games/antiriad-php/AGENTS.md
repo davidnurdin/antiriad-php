@@ -39,9 +39,11 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   an arc: programs 1 / 2, silent), jumping (#6659: up standing: straight up; fire walking, or fire + the way he
   faces standing: forward; up walking only stops him), landing. The ceiling stops
   a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in: he dissolves in front of it
-  (#5D9E / #6E30: 12 masks of #8E22, `sprites/dissolve-PP.png`), then the suit lights up.
-- **Teleporters** (#29, a room's first object, #7192 / #6235): the objects after it wait 40 ticks, then
-  come in its place; shot down before, it brings none. It hums (#0D, a loop) while it is there.
+  (#5D9E / #6E30: the masks of #8E22), then the suit lights up.
+- **Masks** (#6E30, `sprites/dissolve-PP.png`: the sheet repeated for masks 1-11): every object of a
+  room materialises (`Actor::appear`), a killed enemy fades away (`vanish`); the shot bursts (#2D).
+- **Teleporters** (#29, a room's first object, #7192 / #6235): the objects after it wait 40 ticks, it fades
+  away, then they come (materialising); shot down before, it brings none. It hums (#0D, a loop) while it is there.
 - **Kept bugs**: throwing again and again with the way held against a wall moves Tal a byte each
   throw, no wall test (`Hero::control`): he goes through walls, as in the original.
 - **Death** (#5816): 32 ticks (107 frames), a jump or fall goes on, the room keeps moving; then #15.

@@ -271,21 +271,25 @@ def main():
         img.save(f'{OUT}/sprites/sprites-{pi:02d}' + ('-lit' if lit else '') + '.png')
     world['sprites'] = sprites
 
-    # Tal getting into the suit (#6094 -> #5D9E): his front sprite (#09) fades out through the 13 masks of
-    # #6E30, step 12 first; one row of 13 per palette
-    tal = [sprite_pens(9, step) for step in range(13)]
-    tw, th = len(tal[0][0]) * 2, len(tal[0])
+    # #6E30: an object appearing (#B412 = 1: mask 0 up to 12) or going (#FF: 12 down to 0) is drawn through
+    # one of the 13 masks of #8E22; 12 lets all through, 0 nothing. Masks 1-11 of every sprite, one sheet per
+    # palette: the normal sheet's layout repeated 11 times downwards (mask 1 on top).
+    masked = [[sprite_pens(n, step) for n in range(128)] for step in range(1, 12)]
     for pi in range(14):
         pal = palette(pi)
-        img = Image.new('RGBA', (tw * 13, th), (0, 0, 0, 0))
+        img = Image.new('RGBA', (512, sheet_h * 11), (0, 0, 0, 0))
         px = img.load()
-        for step, pens in enumerate(tal):
-            for yy, row in enumerate(pens):
-                for xx, pen in enumerate(row):
-                    if pen is not None:
-                        px[step * tw + xx * 2, yy] = HW[pal[pen]] + (255,)
-                        px[step * tw + xx * 2 + 1, yy] = HW[pal[pen]] + (255,)
+        for k, all_masked in enumerate(masked):
+            for n, pens in enumerate(all_masked):
+                s = sprites[n]
+                for yy, row in enumerate(pens):
+                    for xx, pen in enumerate(row):
+                        if pen is not None:
+                            rgb = HW[pal[pen]] + (255,)
+                            px[s['x'] + xx * 2, k * sheet_h + s['y'] + yy] = rgb
+                            px[s['x'] + xx * 2 + 1, k * sheet_h + s['y'] + yy] = rgb
         img.save(f'{OUT}/sprites/dissolve-{pi:02d}.png')
+    world['sheet_h'] = sheet_h
 
     world['anims'] = [anim(i) for i in range(0x40)]
     world['types'] = [list(m[TYPES + 4 * (t - 1):TYPES + 4 * t]) if t else [0, 0, 0, 0] for t in range(0x40)]

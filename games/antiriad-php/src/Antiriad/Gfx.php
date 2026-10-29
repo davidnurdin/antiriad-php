@@ -51,13 +51,22 @@ final class Gfx
         $r->copy($tex, [$s['x'], $s['y'], $s['w'], $h], (int)round($x), (int)round($y), $s['w'], $h, ($id & 0x80) !== 0);
     }
 
-    /** Tal's front sprite (#09) through dissolve mask $step (12 = whole .. 0 = gone), as #6E30 draws it. */
-    public function dissolve(Renderer $r, int $palette, int $step, float $x, float $y): void
+    /** Sprite $id through mask $step of #6E30 (12 = whole, 0 = nothing): appearing or going (#5D9E). */
+    public function masked(Renderer $r, int $palette, int $id, int $step, float $x, float $y, float $clipBottom = 128): void
     {
-        $s = $this->world->sprites[9];
+        if ($step >= 12) {
+            $this->sprite($r, $palette, $id, $x, $y, $clipBottom);
+            return;
+        }
+        $s = $this->world->sprites[$id & 0x7F];
+        $h = min($s['h'], (int)floor($clipBottom - $y));
+        if ($step <= 0 || $h <= 0 || $s['w'] === 0) {
+            return;
+        }
         $name = sprintf('dissolve-%02d', $palette);
         $tex = $this->texture($name, "assets/sprites/$name.png");
-        $r->copy($tex, [$step * $s['w'], 0, $s['w'], $s['h']], (int)round($x), (int)round($y), $s['w'], $s['h']);
+        $top = ($step - 1) * $this->world->sheetH + $s['y'];
+        $r->copy($tex, [$s['x'], $top, $s['w'], $h], (int)round($x), (int)round($y), $s['w'], $h, ($id & 0x80) !== 0);
     }
 
     /** Size in view pixels of sprite $id. */

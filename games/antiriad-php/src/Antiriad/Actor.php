@@ -48,6 +48,9 @@ final class Actor
     private int $frameIndex = 0;
     private int $frameTimer = 0;
     public int $frame = 0;
+    /** #B412: 0 = there; 1 = appearing, -1 = going (then dead), through mask $mask (#B411, 0-12) */
+    public int $fade = 0;
+    public int $mask = 12;
 
     public function __construct(private World $world, public int $type, public int $x, public int $y, int $program = 0)
     {
@@ -109,8 +112,42 @@ final class Actor
         return [$this->x * World::PIXELS_PER_BYTE, $this->y - World::TOP, $s['w'], $s['h']];
     }
 
+    /** #6A50: it materialises (mask 0 up to 12). */
+    public function appear(): void
+    {
+        $this->fade = 1;
+        $this->mask = 0;
+    }
+
+    /** #5D9E: it fades away (mask 12 down to 0), then is gone. */
+    public function vanish(): void
+    {
+        if ($this->fade !== -1) {
+            $this->fade = -1;
+            $this->mask = 12;
+        }
+    }
+
+    /** Appearing or going: it neither touches nor can be touched (#5AE6, #5B1D, #5D06 skip #B412). */
+    public function fading(): bool
+    {
+        return $this->fade !== 0;
+    }
+
     public function tick(int $heroX, int $heroY): void
     {
+        if ($this->fade > 0) {                    // #5704: a mask a turn; it moves once there (#6BB7)
+            if (++$this->mask >= 12) {
+                $this->fade = 0;
+            }
+            return;
+        }
+        if ($this->fade < 0) {
+            if (--$this->mask <= 0) {
+                $this->dead = true;
+            }
+            return;
+        }
         if ($this->flash > 0) {
             $this->flash--;
         }

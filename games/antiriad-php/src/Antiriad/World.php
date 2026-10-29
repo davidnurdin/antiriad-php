@@ -47,6 +47,9 @@ final class World
     /** @var array{glyphs: list<list<string>>, chars: array<string, int>} */
     public array $font;
 
+    /** height of a sprite sheet: the masked sheets (dissolve-PP.png) repeat it for masks 1-11 */
+    public int $sheetH = 0;
+
     public static function load(string $path): self
     {
         if (self::$instance === null) {
@@ -59,6 +62,7 @@ final class World
                          'messages', 'palettes', 'hw', 'font'] as $key) {
                 $w->$key = $data[$key];
             }
+            $w->sheetH = (int)($data['sheet_h'] ?? 0);
             self::$instance = $w;
         }
         return self::$instance;

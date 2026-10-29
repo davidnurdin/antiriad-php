@@ -176,13 +176,15 @@ final class PlayScene extends AbstractScene
         $r->clear([0, 0, 0]);
         $this->gfx->room($r, $g->room);
         foreach ($g->actors as $a) {
-            if ($a->flash % 2 === 0) {
+            if ($a->fading()) {                   // appearing / going: through mask #B411 (#6E30)
+                $this->gfx->masked($r, $pal, $a->frame, $a->mask, $a->x * World::PIXELS_PER_BYTE, $a->y - World::TOP);
+            } elseif ($a->flash % 2 === 0) {
                 $this->gfx->sprite($r, $pal, $a->frame, $a->x * World::PIXELS_PER_BYTE, $a->y - World::TOP);
             }
         }
         $h = $g->hero;
         if ($g->entering >= 0) {                  // getting in: Tal dissolves in front of the suit, mask 12 .. 0
-            $this->gfx->dissolve($r, $pal, intdiv(12 * $g->entering, Game::ENTER_TICKS), $h->x * World::PIXELS_PER_BYTE, $h->y - World::TOP + $h->drawOffset());
+            $this->gfx->masked($r, $pal, 9, intdiv(12 * $g->entering, Game::ENTER_TICKS), $h->x * World::PIXELS_PER_BYTE, $h->y - World::TOP + $h->drawOffset());
         } elseif ($h->invulnerable === 0 || $g->tick % 2 === 0) {
             $this->gfx->sprite($r, $pal, $h->frame, $h->x * World::PIXELS_PER_BYTE, $h->y - World::TOP + $h->drawOffset(), 128, $h->inSuit);
         }

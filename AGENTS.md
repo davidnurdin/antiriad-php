@@ -786,8 +786,9 @@ there is a **public GitHub repository of the user** holding a JumPHP project wit
 The user signs in with GitHub on the playground, makes an MCP token (`/studio/mcp`) and adds the server to
 Claude Code (the page shows the command, `claude mcp add --transport http --scope user jumphp https://<playground>/mcp
 --header "Authorization: Bearer jph_..."`). Its tools: `whoami`, `list_categories`, `list_projects`,
-`create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_games`,
-`list_game_files`, `read_game_file`. The server's instructions say the same as this section.
+`create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_private_files`,
+`upload_private_files`, `remove_private_files`, `list_games`, `list_game_files`, `read_game_file`. The server's
+instructions say the same as this section.
 
 To make a game for the user on the playground:
 1. `create_project` (title, description, category, `kind`, brief = the user's request); `get_project` until its
@@ -813,8 +814,11 @@ What the playground publishes and how:
 - the site is served as the game's page (framed, on a separate origin); `{{DOMAIN}}` there = `<playground>/<game>`;
 - limits: 4000 files, 120 MB in all, 20 MB per file; no symbolic links;
 - files that may not be public (the data of an original game): keep them out of git and give them to the
-  playground as **private files** (Studio → the project → "Fichiers privés"): the game loads them, no
-  repository, source page or fork holds them;
+  playground as **private files**: the game loads them, no repository, source page or fork holds them.
+  `upload_private_files` gives a signed URL (2 hours) and the `curl` commands: `-F path=assets/data/X.BIN
+  -F file=@X.BIN` (one file), or `-F folder=assets/data -F archive=@data.zip` (a folder; its paths kept), 20 MB
+  per request; 64 MB and 2000 files per game. `list_private_files`, `remove_private_files`. No push or sync
+  needed. (The user can also do it in Studio → the project → "Fichiers privés".);
 - a game without a picture of its own is photographed by the playground (its screen, in a browser);
 - never put the MCP token or any secret in the repository.
 

@@ -54,6 +54,12 @@ function unpack(FS, bytes, dir) {
 	return header.files.length;
 }
 
+// where a file of the manifest is downloaded from
+function fileUrl(file, base, manifestUrl) {
+	return file.url ? new URL(file.url, manifestUrl).href
+		: new URL(safePath(file.path).split('/').map(encodeURIComponent).join('/') + (file.hash ? `?v=${file.hash}` : ''), base).href;
+}
+
 export async function fetchManifest(url) {
 	const response = await fetch(url, { cache: 'no-store' });
 	if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
@@ -89,8 +95,7 @@ return $loader;
 	const worker = async () => {
 		for (let file; (file = queue.shift());) {
 			const path = safePath(file.path);
-			const url = file.url ? new URL(file.url, manifestUrl).href
-				: new URL(path.split('/').map(encodeURIComponent).join('/') + (file.hash ? `?v=${file.hash}` : ''), base).href;
+			const url = fileUrl(file, base, manifestUrl);
 			urls.add(url);
 			write(FS, `/game/${path}`, await cached(file.hash ? filesCache : null, url));
 			onProgress(++done / files.length);
@@ -108,4 +113,34 @@ return $loader;
 		} catch (e) { /* not important */ }
 	}
 	return files.length;
+}
+
+/**
+ * Hot reload (the playground's editor): the manifest asked for again, the files that changed since `previous`
+ * written into /game, the removed ones deleted. Returns the new manifest and the paths that changed ("composer.json"
+ * when the game's namespaces changed: PHP must start again).
+ */
+export async function refreshRemote({ FS, previous, manifestUrl }) {
+	const manifest = await fetchManifest(manifestUrl);
+	const filesCache = await openCache(FILES_CACHE);
+	const base = new URL(manifest.base || 'files/', manifestUrl);
+	const before = new Map((previous.files || []).map((file) => [file.path, `${file.hash}|${file.url || ''}`]));
+	const changed = [];
+	await Promise.all((manifest.files || []).map(async (file) => {
+		const path = safePath(file.path);
+		const known = before.get(file.path);
+		before.delete(file.path);
+		if (known === `${file.hash}|${file.url || ''}`) return;
+		write(FS, `/game/${path}`, await cached(file.hash ? filesCache : null, fileUrl(file, base, manifestUrl)));
+		changed.push(path);
+	}));
+	for (const path of before.keys()) {
+		try { FS.unlink(`/game/${safePath(path)}`); } catch (e) { /* already gone */ }
+		changed.push(safePath(path));
+	}
+	if (JSON.stringify(manifest.autoload || {}) !== JSON.stringify(previous.autoload || {})) {
+		FS.writeFile('/game/vendor/autoload.json', JSON.stringify(manifest.autoload || { 'App\\': ['src/'] }));
+		changed.push('composer.json');
+	}
+	return { manifest, changed: changed.sort() };
 }

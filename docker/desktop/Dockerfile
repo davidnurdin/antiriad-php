@@ -1,7 +1,7 @@
-# JumPHP desktop runtime: native PHP 8.3 + the SDL extensions, built from the SAME forks and commits
+# JumPHP desktop runtime: native PHP 8.5 + the SDL extensions, built from the SAME forks and commits
 # as the WebAssembly engine (docker/engine-wasm), so a game sees the exact same SDL API on both targets.
 # Also used for composer, phpunit, phpstan and headless smoke tests (SDL dummy drivers).
-FROM php:8.3-cli-bookworm
+FROM php:8.5-cli-bookworm
 
 ARG PHP_SDL_REF=89855c8f4f63b77f9a548007b9c4afe366785b4b
 ARG SDL_IMAGE_REF=fd798eb2c52b7be5874a30334d1d255436aa686e
@@ -27,10 +27,11 @@ RUN set -eux; \
     fetch() { mkdir -p "$3" && cd "$3" && git init -q && git remote add origin "https://github.com/$1.git" \
               && git fetch -q --depth 1 origin "$2" && git checkout -q FETCH_HEAD; }; \
     fetch davidnurdin/php-sdl   "$PHP_SDL_REF"   /usr/src/ext-sdl; \
+    sed -i 's/zend_exception_get_default()/zend_ce_exception/g' /usr/src/ext-sdl/src/*.c /usr/src/ext-sdl/src/*.h; \
     fetch kea/php-sdl-image     "$SDL_IMAGE_REF" /usr/src/ext-sdl_image; \
     fetch kea/php-sdl-mixer     "$SDL_MIXER_REF" /usr/src/ext-sdl_mixer; \
     fetch kea/php-sdl-ttf       "$SDL_TTF_REF"   /usr/src/ext-sdl_ttf; \
-    build() { cd "$1" && phpize && ./configure $2 && make -j"$(nproc)" && make install; }; \
+    build() { cd "$1" && phpize && ./configure $2 CFLAGS="-O2 -Werror=implicit-function-declaration" && make -j"$(nproc)" && make install; }; \
     build /usr/src/ext-sdl       --with-sdl; \
     build /usr/src/ext-sdl_image --with-sdl_image; \
     build /usr/src/ext-sdl_mixer --with-sdl_mixer; \
@@ -48,7 +49,7 @@ RUN set -eux; \
     fetch Ponup/php-opengl "$PHP_OPENGL_REF" /usr/src/ext-opengl; \
     fetch Ponup/php-openal "$PHP_OPENAL_REF" /usr/src/ext-openal; \
     cd /usr/src/ext-opengl && git apply /usr/src/php-opengl.patch; \
-    build() { cd "$1" && phpize && ./configure $2 && make -j"$(nproc)" && make install; }; \
+    build() { cd "$1" && phpize && ./configure $2 CFLAGS="-O2 -Werror=implicit-function-declaration" && make -j"$(nproc)" && make install; }; \
     build /usr/src/ext-opengl --with-opengl; \
     build /usr/src/ext-openal --with-openal; \
     docker-php-ext-enable opengl openal; \

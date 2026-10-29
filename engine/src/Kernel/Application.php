@@ -5,6 +5,7 @@ namespace JumPHP\Kernel;
 use JumPHP\Audio\SoundManager;
 use JumPHP\Bridge\JsBridge;
 use JumPHP\Debug\FpsCounter;
+use JumPHP\Debug\LiveFrame;
 use JumPHP\Entity\EntityManager;
 use JumPHP\Input\ActionMap;
 use JumPHP\Input\Gamepad;
@@ -40,6 +41,8 @@ use Symfony\Component\DependencyInjection\Reference;
  * Headless modes (no window, fixed 1/60 s frames), driven by environment variables:
  *   JUMPHP_SMOKE=1        run JUMPHP_MAX_FRAMES frames (default 600), any PHP warning is fatal (exit 1)
  *   JUMPHP_SCREENSHOT=f   run the frames then save the last one as a PNG (JUMPHP_SHOT_EVERY=n: one every n frames)
+ *   JUMPHP_LIVE=f         the current frame written to the PNG f every JUMPHP_LIVE_EVERY frames (default 10), replaced
+ *                         at once (a viewer reads whole pictures only): what the Claude Code pane jumphp-live shows
  *   JUMPHP_INPUT=json     scripted input: [[frame, "action"], [frame, "action", "hold"|"release"], ...]
  *   JUMPHP_SCENE=Class    first scene (JUMPHP_SCENE_PARAMS={"json":1})
  *   JUMPHP_REALTIME=1     headless frames paced in real time (network tests between two processes)
@@ -182,6 +185,10 @@ final class Application
         $shot = Platform::setting('JUMPHP_SCREENSHOT');
         $every = (int)Platform::setting('JUMPHP_SHOT_EVERY', 0);
         $max = (int)Platform::setting('JUMPHP_MAX_FRAMES', $shot !== null ? 120 : 600);
+        $live = Platform::setting('JUMPHP_LIVE');
+        if ($live !== null && $frame % max(1, (int)Platform::setting('JUMPHP_LIVE_EVERY', 10)) === 0) {
+            LiveFrame::write($this->engine->sdl, (string)$live);
+        }
         if ($shot !== null && $every > 0 && $frame % $every === 0) {
             $this->engine->sdl->saveScreenshot(preg_replace('/\.png$/', '', (string)$shot) . sprintf('-%05d.png', $frame));
         }

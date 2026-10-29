@@ -17,3 +17,4 @@
 # crash dumps
 core
 core.[0-9]*
+/var/

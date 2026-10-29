@@ -15,7 +15,7 @@ threads.
 | Image | `jumphp/desktop:dev` (`docker/desktop`) | `jumphp/desktop-async:dev` (`docker/desktop-async`, ~15 min la première fois) |
 | Extensions | SDL2, SDL_image, SDL_mixer, SDL_ttf, GD… | les mêmes, mêmes commits, + `true_async` et libuv 1.52.1 |
 | `JumPHP\Async` | sans threads : travail réparti entre les frames | vrais threads (pool, un thread par tâche) |
-| Navigateur | moteur WebAssembly PHP 8.3 ; `JumPHP\Async` passe par des **Web Workers** (voir plus bas) | idem |
+| Navigateur | moteur WebAssembly PHP 8.5 ; `JumPHP\Async` passe par des **Web Workers** (voir plus bas) | idem |
 
 Un jeu choisit son runtime dans `config/game.yaml` :
 

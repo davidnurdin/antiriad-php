@@ -7,6 +7,7 @@ use JumPHP\Async\Tasks;
 use JumPHP\Audio\SoundManager;
 use JumPHP\Bridge\JsBridge;
 use JumPHP\Debug\FpsCounter;
+use JumPHP\Debug\HotReload;
 use JumPHP\Device\Device;
 use JumPHP\Device\Lifecycle;
 use JumPHP\Device\Pwa;
@@ -116,11 +117,16 @@ class Engine extends EventEmitter
         $this->lastTime = Time::now();
         $this->emit('boot');
 
-        [$scene, $params] = $this->startScene();
+        // after a hot reload (the playground's editor): the scene that was playing, with its state
+        $hot = HotReload::pending();
+        [$scene, $params] = $hot ?? $this->startScene();
         if ($scene === null) {
             throw new \RuntimeException('No first scene: set game.start_scene in config/game.yaml');
         }
         $this->scenes->switchTo($scene, $params, false);
+        if ($hot !== null) {
+            HotReload::restore($this, $hot[2]);
+        }
     }
 
     public const DEFAULT_ACTIONS = [
@@ -216,6 +222,20 @@ class Engine extends EventEmitter
         $this->net?->close();
         $this->tasks?->shutdown();
         $this->gameLoop->stop();
+    }
+
+    /**
+     * Everything the game holds outside PHP closed: the network, the worker threads, the sound, the window. Before
+     * a hot reload starts PHP again in the same page (HotReload): the new boot opens them again.
+     */
+    public function shutdown(): void
+    {
+        $this->running = false;
+        $this->net?->close();
+        $this->tasks?->shutdown();
+        $this->closeAudio3d();
+        $this->sound->close();
+        $this->sdl->quit();
     }
 
     /** Seconds of game time since boot (scaled by timeScale). */

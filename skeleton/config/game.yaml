@@ -4,6 +4,7 @@ game:
   title: "JumPHP Skeleton"
   version: 0.1.0
   description: "A tiny platformer: the starting point of a JumPHP game."
+  descriptions: {}              # per language, {fr: "...", en: "..."}: the playground (jumphp.net) shows the visitor's
   width: 320                    # virtual resolution (pixels of the game, scaled to the window)
   height: 180
   scale: 3                      # desktop window = 960 x 540

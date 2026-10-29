@@ -32,6 +32,9 @@ const TASKS_DIR = '/tmp/jumphp-tasks';
 const WORKERS = typeof Worker === 'undefined' ? 0
 	: Math.max(0, Math.min(8, Number(params.get('workers') ?? Math.min(4, (navigator.hardwareConcurrency || 2) - 1)) || 0));
 const lastLines = [];
+let bootError = '';
+// what PHP said when the game did not start: its error first, then its last lines
+const bootOutput = () => [bootError, ...lastLines.filter((line) => line !== bootError)].filter(Boolean).join('\n');
 
 window.JumPHP = window.JumPHP || { onBridge: null, FS: null };
 
@@ -301,11 +304,14 @@ async function main() {
 			const m = /\((\d+)\/(\d+)\)/.exec(text || '');
 			if (m) setProgress(0.45 + 0.45 * Number(m[1]) / Number(m[2]));
 		},
-		print(text) { console.log(text); },
+		print(text) { console.log(text); forwardOutput('out', text); },
 		printErr(text) {
 			// emscripten noise: PHP maps its scripts with mmap, MEMFS cannot unmap them (harmless)
 			if (!text || /munmap\(\) failed/.test(text)) return;
 			console.error(text);
+			forwardOutput('err', text);
+			// the error itself (PHP's first line, "BOOT FAILED: ParseError: ... line 70") is kept before its trace
+			if (/BOOT FAILED|Fatal error|Parse error/.test(text)) bootError = String(text);
 			lastLines.push(String(text));
 			if (lastLines.length > 8) lastLines.shift();
 		},
@@ -316,6 +322,7 @@ async function main() {
 			writeEvents();
 		},
 		postMainLoop() {
+			flushOutput(FSref);
 			pollBridge(FSref);
 			for (const fn of afterFrame) { try { fn(); } catch (e) { console.error(e); } }
 		},
@@ -358,7 +365,7 @@ async function main() {
 	try {
 		ccall('phpw_run', 'void', ['string'], [prelude()]);
 		// back without "unwind": jumphp_frame() was never reached (the boot failed)
-		fail('The game did not start:\n' + (lastLines.join('\n') || 'see the browser console'));
+		fail('The game did not start:\n' + (bootOutput() || 'see the browser console'));
 		return;
 	} catch (e) {
 		// emscripten_set_main_loop(..., simulate_infinite_loop) throws "unwind": the normal case
@@ -372,6 +379,7 @@ async function main() {
 	await nextFrame();
 	loader.style.display = 'none';
 	startTasks(FS, wasmBinary, remote);
+	if (remote) listenHotReload(FS, ccall, remote);
 	window.JumPHPTouch?.start();
 	notifyParent({ type: 'jumphp:ready', game: GAME.id });
 
@@ -388,6 +396,75 @@ async function main() {
 	// a touch only allows fullscreen when the finger goes up (pointerup), a mouse when it goes down
 	overlay.addEventListener(TOUCH ? 'pointerup' : 'pointerdown', start, { once: true });
 	addEventListener('keydown', start, true);
+}
+
+// Hot reload (the playground's editor: {type: 'jumphp:hot'} from the parent page, after a file was saved): the
+// files that changed are written into /game, then the engine decides (engine/src/Debug/HotReload.php): pictures,
+// sounds, translations and keys reloaded in place; data: the scene entered again; code: PHP started again in this
+// same engine (phpw_restart: no page reload, no new WebAssembly), in the scene that was playing, with its state
+// when the scene keeps it (JumPHP\Scene\HotReloadable). The answer: {type: 'jumphp:hot-done', result, changed}.
+function listenHotReload(FS, ccall, remote) {
+	let isPlaying = true;
+	const hot = async () => {
+		const { refreshRemote } = await import(engineUrl('jumphp-files.js'));
+		const { manifest, changed } = await refreshRemote({ FS, previous: remote.manifest, manifestUrl: remote.manifestUrl });
+		remote.manifest = manifest;
+		if (!changed.length) return { result: 'none', changed };
+		let result = 'restart';
+		if (isPlaying) {
+			try { FS.unlink('/tmp/jumphp-hot-result'); } catch (e) { /* none yet */ }
+			callPhp(`\\JumPHP\\Debug\\HotReload::apply(${phpString(JSON.stringify(changed))});`);
+			try { result = FS.readFile('/tmp/jumphp-hot-result', { encoding: 'utf8' }); } catch (e) { result = 'restart'; }
+		}
+		if (result === 'restart') {
+			if (isPlaying) callPhp('\\JumPHP\\Debug\\HotReload::save(); \\JumPHP\\Debug\\HotReload::shutdown();');
+			lastLines.length = 0;
+			bootError = '';
+			isPlaying = ccall('phpw_restart', 'number', ['string'], [prelude()]) === 1;
+			if (!isPlaying) {
+				fail('The game did not start:\n' + (bootOutput() || 'see the browser console'));
+				return { result: 'error', changed, message: bootOutput() };
+			}
+			loader.classList.remove('error');
+			loader.style.display = 'none';
+		}
+		return { result, changed };
+	};
+	let queue = Promise.resolve();
+	addEventListener('message', (event) => {
+		if (event.source !== window.parent || event.data?.type !== 'jumphp:hot') return;
+		queue = queue.then(hot).then(
+			(answer) => notifyParent({ type: 'jumphp:hot-done', game: GAME.id, ...answer }),
+			(e) => notifyParent({ type: 'jumphp:hot-done', game: GAME.id, result: 'error', message: String(e?.message || e) }),
+		);
+	});
+}
+
+// What PHP writes (echo, var_dump, print_r, phpinfo() as HTML, warnings) to the page around the game, when there
+// is one (the playground's console): {type: 'jumphp:output', lines: [[stream, text]...]}, ten times a second at
+// most, 1000 lines a batch (the rest counted: a game that prints every frame does not flood the page).
+const OUTPUT_MAX = 1000;
+let outputLines = [];
+let outputDropped = 0;
+let outputTimer = 0;
+// emscripten keeps a line until its newline: what PHP wrote during the frame, sent whole (phpinfo() ends without one)
+function flushOutput(FS) {
+	if (!FS || window.parent === window) return;
+	for (const fd of [1, 2]) {
+		try { const stream = FS.getStream(fd); stream?.stream_ops?.fsync?.(stream); } catch (e) { /* not a terminal */ }
+	}
+}
+
+function forwardOutput(stream, text) {
+	if (window.parent === window) return;
+	if (outputLines.length < OUTPUT_MAX) outputLines.push([stream, String(text)]);
+	else outputDropped++;
+	outputTimer ||= setTimeout(() => {
+		notifyParent({ type: 'jumphp:output', game: GAME.id, lines: outputLines, dropped: outputDropped });
+		outputLines = [];
+		outputDropped = 0;
+		outputTimer = 0;
+	}, 100);
 }
 
 // Fullscreen of the whole page (not only the canvas: the on-screen touch controls stay visible), then, on

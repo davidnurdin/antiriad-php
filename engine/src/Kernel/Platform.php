@@ -24,10 +24,11 @@ final class Platform
         return (bool)self::setting('JUMPHP_MOBILE', false);
     }
 
-    /** Headless run: smoke test or screenshot (no window, dummy audio). */
+    /** Headless run: smoke test, screenshot or a game test (no window, dummy audio). */
     public static function isHeadless(): bool
     {
-        return self::setting('JUMPHP_SMOKE') !== null || self::setting('JUMPHP_SCREENSHOT') !== null;
+        return self::setting('JUMPHP_SMOKE') !== null || self::setting('JUMPHP_SCREENSHOT') !== null
+            || self::setting('JUMPHP_TEST') !== null;
     }
 
     /** A constant, else an environment variable, else $default. */

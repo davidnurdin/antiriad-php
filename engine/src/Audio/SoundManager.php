@@ -26,6 +26,8 @@ class SoundManager
     /** @var array<string, array{loop: mixed, intro: mixed}> */
     private array $musics = [];
     private ?string $currentMusic = null;
+    /** @var array<string, array{0: string, 1: ?string, 2: bool}> file, intro file, music? of each loaded sound (hot reload) */
+    private array $sources = [];
     private bool $inIntro = false;
     private float $sfxVolume = 1.0;
     private float $musicVolume = 0.7;
@@ -66,6 +68,43 @@ class SoundManager
             throw new \RuntimeException("Mix_LoadWAV($file) failed: " . \Mix_GetError());
         }
         $this->chunks[$name] = $chunk;
+        $this->sources[$name] = [$file, null, false];
+    }
+
+    /**
+     * The sounds and musics of these files (absolute paths) loaded again: a sound changed while the game runs (hot
+     * reload). A music playing plays again. @return int how many
+     *
+     * @param string[] $files
+     */
+    public function reloadFiles(array $files): int
+    {
+        $count = 0;
+        foreach ($this->sources as $name => [$file, $intro, $isMusic]) {
+            if (!in_array($file, $files, true) && ($intro === null || !in_array($intro, $files, true))) {
+                continue;
+            }
+            if ($isMusic && isset($this->musics[$name])) {
+                $wasPlaying = $this->currentMusic === $name;
+                if ($wasPlaying) {
+                    \Mix_HaltMusic();
+                    $this->currentMusic = null;
+                }
+                \Mix_FreeMusic($this->musics[$name]['loop']);
+                if ($this->musics[$name]['intro']) {
+                    \Mix_FreeMusic($this->musics[$name]['intro']);
+                }
+                $this->loadMusic($name, $file, $intro);
+                if ($wasPlaying) {
+                    $this->playMusic($name);
+                }
+            } elseif (isset($this->chunks[$name])) {
+                \Mix_FreeChunk($this->chunks[$name]);
+                $this->loadSfx($name, $file);
+            }
+            $count++;
+        }
+        return $count;
     }
 
     /** Registers a generated sound (Synth::*). */
@@ -126,6 +165,7 @@ class SoundManager
         }
         $intro = $introPath !== null ? \Mix_LoadMUS($this->resolve($introPath)) : null;
         $this->musics[$name] = ['loop' => $loop, 'intro' => $intro ?: null];
+        $this->sources[$name] = [$this->resolve($path), $introPath !== null ? $this->resolve($introPath) : null, true];
     }
 
     public function playMusic(string $name, bool $loop = true): void

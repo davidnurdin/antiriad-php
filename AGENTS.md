@@ -2,8 +2,8 @@
 
 You are working in **JumPHP**, a framework to write **retro 2D games in PHP**. The same PHP code runs:
 
-- on the **desktop** (native PHP 8.3 + SDL2 / OpenGL / OpenAL extensions, in Docker, in a real window with sound),
-- in the **browser** (the same PHP 8.3 + extensions compiled to WebAssembly: OpenGL = WebGL, OpenAL = Web Audio;
+- on the **desktop** (native PHP 8.5 + SDL2 / OpenGL / OpenAL extensions, in Docker, in a real window with sound),
+- in the **browser** (the same PHP 8.5 + extensions compiled to WebAssembly: OpenGL = WebGL, OpenAL = Web Audio;
   the game is a static web page).
 
 Everything (PHP, composer, emscripten, web server, relay server, tests) runs **in Docker** through one
@@ -103,7 +103,7 @@ games/<id>/
 7. **Draw only in `render()`, change state only in `update()`.** Coordinates are virtual pixels
    (`game.yaml` width × height); the engine scales to the window.
 8. **Scenes are reused** (one instance per class, from the container): reset ALL state in `enter()`.
-9. **No `declare(strict_types=1)`** required, PHP 8.2 syntax max (the desktop runs 8.3, the browser 8.3).
+9. **No `declare(strict_types=1)`** required, PHP 8.2 syntax max (the desktop runs 8.5, the browser 8.5).
    Code, identifiers and comments in English. Follow the style of `games/pong`.
 10. **Forbidden words**: `bin/jumphp lint` fails if the repository contains certain brand names
     (`tools/check-forbidden-words.sh`). Do not name games, classes or files after existing commercial games.
@@ -124,7 +124,7 @@ games/<id>/
 | `bin/jumphp install <id>` | composer install of the game |
 | `bin/jumphp composer <id> require vendor/pkg` | composer (pure-PHP packages only: no extension exists in the browser) |
 | `bin/jumphp run <id>` | plays on the desktop (window + sound). Needs a display; not usable by an agent without a screen. |
-| `bin/jumphp test <id>` | `php -l`, phpstan (level 5, if `phpstan.neon` and `bin/jumphp test engine` ran once), phpunit (`tests/` if any), **headless smoke test** (600 frames, any PHP warning = failure) |
+| `bin/jumphp test <id>` | `php -l`, phpstan (level 5, if `phpstan.neon` and `bin/jumphp test engine` ran once), phpunit (`tests/` if any, game tests included), **headless smoke test** (600 frames, any PHP warning = failure) |
 | `bin/jumphp shot <id> [frames] [out.png]` | **headless screenshot**: runs N frames (default 120) and saves a PNG in `games/<id>/var/screenshots/` — open it to SEE the game |
 | `bin/jumphp build <id>` | browser build → `games/<id>/dist/web/` (static files) |
 | `bin/jumphp build:remote <id>` | the game as a **remote game** (`dist/remote/`: shared engine + files one by one + manifest, what a games site serves, docs/remote.md); `JUMPHP_WEB=remote bin/jumphp serve/webshot <id>` tries it |
@@ -135,10 +135,18 @@ games/<id>/
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
 | `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP), a game with its own web site (`games/<id>/site/index.html`) gets it at the root and the game in `/play/` (`{{DOMAIN}}` replaced in its pages), then checks that `https://<domain>/` answers (shows the server logs if not). Behind a Traefik already on the server: `bin/jumphp server:traefik` prints its entry points and resolver (`JUMPHP_SERVER_MODE` `traefik-external`, or `traefik-passthrough` when it has no working resolver). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
 | `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
+| `bin/jumphp cli:install` / `cli:uninstall` | the `jumphp` command for the whole system (`~/.local/bin/jumphp`, `tools/jumphp-cli`): `jumphp <command>` from any folder of a project, `jumphp new <folder>`, and once a day a question when Packagist has a newer JumPHP (`bin/jumphp update` on a yes) |
+| `bin/jumphp twa <id> --url <page>` | the game as an Android app for Google Play (§14, "Android app") |
 | `bin/jumphp pages [id...]` | builds the games (default: all) + a home page from their `game.json`, force-pushes them as the `gh-pages` branch of the git remote (GitHub Pages: `https://<owner>.github.io/<repo>/`). Publishing: only when asked |
 | `bin/jumphp test engine` | engine unit tests + phpstan |
 | `bin/jumphp lint` | php -l everywhere + forbidden words |
 | `bin/jumphp php <dir> <args>` | php in the runtime image (from a repo-relative dir) |
+
+**A new project** (you ran `composer create-project jumphp/jumphp <folder>` or cloned one for the user): ask the
+user once whether to install the `jumphp` command for the whole system (`bin/jumphp cli:install`: then
+`jumphp test <id>` works from any folder, `jumphp new` makes other projects, and they are told when a new
+JumPHP is out, updating only if they say yes). Install it only on a yes; it changes their `~/.local/bin` (and,
+if they agree in the terminal, their shell profile).
 
 Headless runs (`test`, `shot`) use a **fresh temporary `var/`** (options and saves start from the defaults,
 the player's files are never touched; `JUMPHP_VAR=<dir>` forces a folder). They are driven by environment variables:
@@ -192,6 +200,7 @@ Replace its scenes and entities with your game:
    | Key | Default | |
    |---|---|---|
    | `id`, `title`, `version`, `description` | | identity (page title, `game.json` for the portal) |
+   | `descriptions` | {} | the description per language, `{fr: '…', en: '…'}`: the playground shows the visitor's (fill both) |
    | `width`, `height` | 320, 180 | virtual resolution (classic: 320×180, 256×224, 256×192, 320×240) |
    | `scale` | 3 | desktop window = width × scale |
    | `integer_scale` | false | scale by whole factors only (sharper, bigger black borders) |
@@ -221,7 +230,8 @@ Replace its scenes and entities with your game:
    `BitmapFont`, and `Synth` sounds.
 6. Replace the skeleton leftovers: `description` in game.yaml, `README.md`, `AGENTS.md`, unused `lang.yaml`
    entries, `src/Entity/Coin.php`...
-7. `bin/jumphp test <id>` + `bin/jumphp shot <id>`; iterate.
+7. **Game tests as you go** (§10 "Game tests"): each mechanic you write gets a test that plays it, run at once
+   with `bin/jumphp test <id>` (the user watches them play); `bin/jumphp shot <id>`; iterate.
 8. Browser: `bin/jumphp engine:build` (once per machine), `bin/jumphp build <id>`, `bin/jumphp webshot <id>`.
 
 ---
@@ -319,6 +329,24 @@ Labels and the `$title` are translated with `config/lang.yaml`. Call `$this->ref
 label. Override `renderBackground(Renderer $r)` for a custom background; `$titleScale`, `$menuTop`,
 `$background`, `$titleColor` customise it. Menu sounds: define sfx named `menu_move` and `menu_confirm`.
 Hide `QUIT` in the browser: `if (Platform::isDesktop())`.
+
+**Hot reload** (the playground's online editor and sandbox, ⚡ Live): a file saved goes into the running game
+without reloading the page (`engine/src/Debug/HotReload.php`). Pictures, sounds, `lang.yaml`, `input.yaml`:
+replaced in place. Another data file: the current scene is entered again with its parameters. PHP code,
+`game.yaml`, `services.yaml`, `composer.json`: PHP restarts in the same WebAssembly engine and boots straight
+into the scene that was playing. Its fields are then fresh; a scene whose state is worth keeping while one
+tunes the game (the room, the score, the player's position) implements `JumPHP\Scene\HotReloadable`:
+
+```php
+final class PlayScene extends AbstractScene implements HotReloadable
+{
+    public function hotState(): array { return ['room' => $this->room, 'score' => $this->score, 'lives' => $this->lives]; }
+    public function hotRestore(array $state): void { ['room' => $this->room, 'score' => $this->score, 'lives' => $this->lives] = $state; }  // after enter()
+}
+```
+
+Plain values only (they cross from one version of the code to the next). Do it for the main play scene of a
+game; it changes nothing outside hot reload. `docs/hot-reload.md` has the details.
 
 ---
 
@@ -575,7 +603,7 @@ procedural pictures) off the main thread, so the frame never waits.
     game on PHP 8.6 ZTS + [TrueAsync](https://true-async.github.io), `docker/desktop-async`);
   - `'workers'`: **the browser**: a pool of Web Workers, each running its own PHP engine with the game's
     files (`engine/web/jumphp-worker.js`; cores - 1, at most 4; `?workers=N` in the page URL, 0 = none);
-  - `'frames'`: default desktop runtime (PHP 8.3): jobs run on the main thread between frames,
+  - `'frames'`: default desktop runtime (PHP 8.5): jobs run on the main thread between frames,
     `$tasks->budget` ms per frame (4 by default, at least one job). Also the fallback when no Web Worker
     can start.
   `Tasks::threaded()` is true for the first two. A game must be correct with all three.
@@ -684,7 +712,8 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 
 ## 10. Definition of done (always)
 
-1. `bin/jumphp test <id>` passes (it runs your `smoke` scene 600 frames; make that a self-playing demo).
+1. `bin/jumphp test <id>` passes (it runs your `smoke` scene 600 frames; make that a self-playing demo), with game
+   tests (below) for the main mechanics.
 2. `bin/jumphp shot <id> 60` (title) and `JUMPHP_INPUT='[[5,"confirm"]]' bin/jumphp shot <id> 240 var/screenshots/play.png`
    (in game): **open the PNGs and check** that what you see is what you intended.
 3. Menus reachable, `pause` / `back` work, the game can be won / lost and restarted.
@@ -692,6 +721,44 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 5. If the browser engine exists (`build/engine/php-web.wasm`): `bin/jumphp build <id>` then
    `bin/jumphp webshot <id> 6 '[[1,"Enter"]]'` passes and its screenshot looks right.
 6. Update `games/<id>/AGENTS.md` (what the game is, its scenes, its controls, anything non-obvious).
+
+### Game tests: tests that play the game
+
+Besides plain unit tests (`games/<id>/tests/*Test.php`, PHPUnit 11), write a few **game tests**: a test that plays
+the game, frame by frame, and checks what happened. Extend `JumPHP\Testing\GameTestCase`; `$this->game` drives it:
+
+```php
+<?php
+namespace Tests;
+
+use App\Entity\Paddle;
+use App\Scene\PlayScene;
+use JumPHP\Testing\GameTestCase;
+
+final class PaddleTest extends GameTestCase
+{
+    public function testThePaddleGoesFromTheTopToTheBottom(): void
+    {
+        $this->game->start(PlayScene::class, ['mode' => 'local']);   // the scene, no fade, one frame
+        $paddle = $this->game->peek('left');                        // a field of the scene, private or not
+        $this->game->hold('p1_up', 60);                             // an action held 60 frames (1 s), then let go
+        self::assertEqualsWithDelta(PlayScene::TOP, $paddle->getBoundingBox()['y'], 1);
+        $this->game->hold('p1_down', 90);
+        self::assertEqualsWithDelta(PlayScene::BOTTOM - Paddle::HEIGHT, $paddle->getBoundingBox()['y'], 1);
+    }
+}
+```
+
+`start($scene, $params)`, `press($action, $frames = 1)`, `hold($action, $frames)`, `run($frames)`, `wait($seconds)`,
+`scene()`, `peek($field, $object = null)`, `shot($name)` (a PNG of the frame). One game per PHP process: each test
+starts the scene it needs. Test what the player sees happen: a move, a jump that lands, a pickup that scores, an
+enemy that dies, a level that ends. Name tests as sentences (`testTheBallBouncesOnThePaddle`): they are shown as
+such. Watched live: `bin/jumphp test` with `JUMPHP_LIVE=1` (the Claude Code pane `jumphp-live` sets it) writes the
+frames as they run and each test's last frame (`var/live/tests/`); `JUMPHP_REALTIME=1` runs them at the game's speed.
+They need SDL: `bin/jumphp test` runs them, and so does the playground's sandbox (MCP `run_tests`, without a
+window): there each game test is **filmed** (`JUMPHP_FILM`: a frame every 4) and the owner replays it in the
+studio, test by test. Write them **while you develop**, not at the end: a mechanic is done when its game test
+passes and its frames show it.
 
 ## 11. Troubleshooting
 
@@ -776,7 +843,7 @@ and `tools/site/`).
 
 ## 14. Publishing on the JumPHP playground
 
-The **JumPHP playground** is a web site of JumPHP games: a directory by category, each game at
+The **JumPHP playground** (https://jumphp.net) is a web site of JumPHP games: a directory by category, each game at
 `https://<playground>/<game>`, played in the browser with a shared engine (remote mode, docs/remote.md), its
 sources browsable, an online editor. Its source: https://github.com/davidnurdin/jumphp-playground. A project
 there is a **public GitHub repository of the user** holding a JumPHP project with **one game** in
@@ -785,20 +852,26 @@ there is a **public GitHub repository of the user** holding a JumPHP project wit
 The user signs in with GitHub on the playground, makes an MCP token (`/studio/mcp`) and adds the server to
 Claude Code (the page shows the command, `claude mcp add --transport http --scope user jumphp https://<playground>/mcp
 --header "Authorization: Bearer jph_..."`). Its tools: `whoami`, `list_categories`, `list_projects`,
-`create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_games`,
-`list_game_files`, `read_game_file`. The server's instructions say the same as this section.
+`create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_private_files`,
+`upload_private_files`, `remove_private_files`, `list_games`, `list_game_files`, `read_game_file`, `run_tests`,
+`get_test_run` (the game's PHPUnit tests, game tests filmed), notes and todos, feedback. The server's
+instructions say the same as this section.
 
 To make a game for the user on the playground:
-1. `create_project` (title, description, category, brief = the user's request); `get_project` until its status
-   is no longer `creating`. It made the repository from this version of JumPHP with the skeleton game and
+1. `create_project` (title, description, category, `kind`, brief = the user's request); `get_project` until its
+   status is no longer `creating`. `kind`: `original` (a new game), `cpc` (the remake of an Amstrad CPC game
+   from its `.dsk`: made with dsk2jumphp, §12; ask the user for the path of their disc), `port` (a port of a game
+   whose source code exists). It made the repository from this version of JumPHP with the skeleton game and
    `BRIEF.md`.
-2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only.
+2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only, with a game
+   test for each mechanic as you write it (§10).
 3. Its home page `games/<id>/site/` (§13) and `games/<id>/assets/thumbnail.png` (the directory's picture,
    16:9; else the site's `og:image`, else `assets/icon.png`).
 4. Check it like the playground runs it: `bin/jumphp build:remote <id>` then
    `JUMPHP_WEB=remote bin/jumphp webshot <id> 6 '[[1,"Enter"]]'`.
 5. Commit, `git push`, `sync_project`: it publishes at once and returns errors / warnings. Fix and push until
-   the status is `ready`. Then `update_project listed=true` and give the user the game's URL.
+   the status is `ready`. `run_tests` then `get_test_run`: the tests pass there too (the user replays the
+   filmed game tests in the studio). Then `update_project listed=true` and give the user the game's URL.
 
 What the playground publishes and how:
 - only `games/<id>/` (the `vendor/` of the game is not used: the engine and its packages come from the shared
@@ -809,10 +882,40 @@ What the playground publishes and how:
   player's browser);
 - the site is served as the game's page (framed, on a separate origin); `{{DOMAIN}}` there = `<playground>/<game>`;
 - limits: 4000 files, 120 MB in all, 20 MB per file; no symbolic links;
+- files that may not be public (the data of an original game): keep them out of git and give them to the
+  playground as **private files**: the game loads them, no repository, source page or fork holds them.
+  `upload_private_files` gives a signed URL (2 hours) and the `curl` commands: `-F path=assets/data/X.BIN
+  -F file=@X.BIN` (one file), or `-F folder=assets/data -F archive=@data.zip` (a folder; its paths kept), 20 MB
+  per request; 64 MB and 2000 files per game. `list_private_files`, `remove_private_files`. No push or sync
+  needed. (The user can also do it in Studio → the project → "Fichiers privés".);
+- a game without a picture of its own is photographed by the playground (its screen, in a browser);
 - never put the MCP token or any secret in the repository.
+
+### Android app (Google Play)
+
+When the user wants the game on the Play Store (or "on Android", "an app"): `bin/jumphp twa <id> --url <the
+game's page online, https>` makes a Trusted Web Activity with Google's Bubblewrap, in Docker (docs/android.md).
+It asks the app's package the first time (suggest `io.github.<github user>.<id with _>`; it never changes) and,
+the first time on this computer, **the user must accept the Android SDK license themselves**: tell them to run
+the command in their terminal (`! bin/jumphp twa <id> --url ...` in Claude Code); never accept it for them.
+Then:
+- out: `games/<id>/dist/android/<id>-<version>.aab` (Google Play), `.apk` (a phone), `assetlinks.json`, and the
+  SHA-256 fingerprint of the upload key (printed). `games/<id>/android/twa-manifest.json` goes into git; the key
+  and its password (`~/.jumphp/android/keys/`) never do: tell the user to back them up;
+- the site must vouch for the app, or it opens with an address bar: on the playground, `update_project` with
+  `android_package` and `android_fingerprints`; on one's own server, `dist/android/assetlinks.json` served at
+  `https://<domain>/.well-known/assetlinks.json` (`bin/jumphp deploy` serves `site/.well-known/` if you copy it there);
+- the name under the icon: game.yaml `pwa: {short_name: ...}` (12 characters show whole on most phones);
+- the Play Console is the user's (their developer account): list the steps (create the app with the same
+  package, internal testing with the .aab, then **add Google Play's app signing fingerprint** with
+  `update_project` too, store listing with `bin/jumphp shot` screenshots);
+- a new version of the app (name, icon): `bin/jumphp twa <id>` again (versionCode + 1). The game itself updates
+  with the site, no new app needed.
 
 ## 15. Reference
 
+- `games/hello-world/` — the smallest game: a menu (play, sound on / off, quit), a text moved by the arrows, a
+  Synth sound. The start of the playground's tutorials.
 - `games/pong/` — complete game: menus, options, AI, local 2 players, online, pause, game over.
 - `games/hello-threads/` — threads (`runtime: async`): a thread pool computes a fractal, the frame never waits.
 - `games/hello-webgl/` — WebGL / OpenGL: 3D cubes under a 2D HUD, post-processing shaders, raw gl* + OpenAL (`RawGlScene`),

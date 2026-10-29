@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The set-up wizard of a JumPHP project (bin/jumphp init, run by composer create-project):
-#   1. tools: git, curl, docker (+ compose, buildx)... installed with the system's package manager when missing
+#   1. tools: git, curl, docker (+ compose, buildx)... installed with the system's package manager when missing;
+#      the `jumphp` command for the whole system offered (bin/jumphp cli:install)
 #   2. the game: name, id, description, resolution, language -> games/<id> from skeleton/, .env
 #   3. Docker images, the browser engine (prebuilt download or local build), a first test
 #   4. deployment to a server (FrankenPHP alone, Traefik + FrankenPHP, or an existing Traefik)
@@ -231,6 +232,24 @@ step_tools() {
   check_docker "$@" || return 1
   info "$(t "Le reste (PHP, composer, emscripten, serveur web...) tourne dans Docker : rien d'autre à installer." \
             "Everything else (PHP, composer, emscripten, web server...) runs in Docker: nothing else to install.")"
+}
+
+# the `jumphp` command for the whole system (bin/jumphp cli:install): offered, never forced (not with --yes)
+step_cli() {
+  local installed="${JUMPHP_BIN_DIR:-$HOME/.local/bin}/jumphp"
+  if [ -f "$installed" ] && cmp -s "$installed" "$ROOT/tools/jumphp-cli"; then
+    ok "$(t 'la commande jumphp est installée' 'the jumphp command is installed')"; return 0
+  fi
+  [ "$YES" = 1 ] && return 0
+  info "$(t "La commande \`jumphp\` pour tout le système : \`jumphp test mon-jeu\` depuis n'importe quel dossier du projet," \
+            "The \`jumphp\` command for the whole system: \`jumphp test my-game\` from any folder of the project,")"
+  info "$(t "\`jumphp new <dossier>\` pour un autre projet, et une question quand une nouvelle version de JumPHP sort (Packagist)." \
+            "\`jumphp new <folder>\` for another project, and a question when a new JumPHP is out (Packagist).")"
+  if confirm "$(t "Installer la commande jumphp (dans ~/.local/bin) ?" "Install the jumphp command (in ~/.local/bin)?")" y; then
+    "$JUMPHP" cli:install && ok "jumphp"
+  else
+    info "$(t 'Plus tard : bin/jumphp cli:install' 'Later: bin/jumphp cli:install')"
+  fi
 }
 
 # ---------------------------------------------------------------------------------------------------------
@@ -515,6 +534,7 @@ summary() {
   info "bin/jumphp test $game       $(t '# tests' '# tests')"
   info "bin/jumphp deploy           $(t '# sur ton serveur (bin/jumphp deploy:setup)' '# to your server (bin/jumphp deploy:setup)')"
   info "bin/jumphp update           $(t '# nouvelle version de JumPHP' '# a new version of JumPHP')"
+  info "bin/jumphp cli:install      $(t '# la commande jumphp pour tout le système' '# the jumphp command for the whole system')"
   info "bin/jumphp help"
 }
 
@@ -531,6 +551,7 @@ info "$(t "Cet assistant prépare le projet ; chaque étape demande avant d'agir
           "This wizard sets up the project; each step asks before acting. Ctrl+C to stop, bin/jumphp init to resume.")"
 
 step_tools "$@" || exit 1
+step_cli
 step_game || exit 1
 step_build
 step_deploy

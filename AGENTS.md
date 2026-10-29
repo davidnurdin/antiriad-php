@@ -776,7 +776,7 @@ and `tools/site/`).
 
 ## 14. Publishing on the JumPHP playground
 
-The **JumPHP playground** is a web site of JumPHP games: a directory by category, each game at
+The **JumPHP playground** (https://jumphp.net) is a web site of JumPHP games: a directory by category, each game at
 `https://<playground>/<game>`, played in the browser with a shared engine (remote mode, docs/remote.md), its
 sources browsable, an online editor. Its source: https://github.com/davidnurdin/jumphp-playground. A project
 there is a **public GitHub repository of the user** holding a JumPHP project with **one game** in

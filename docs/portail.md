@@ -1,6 +1,6 @@
 # Les portails de jeux et le playground
 
-**Le playground JumPHP** (https://github.com/davidnurdin/jumphp-playground) est un portail complet : annuaire
+**Le playground JumPHP** ([jumphp.net](https://jumphp.net), code : https://github.com/davidnurdin/jumphp-playground) est un portail complet : annuaire
 par catégorie, une page par jeu (son site `games/<id>/site/`), les jeux joués en mode distant
 ([remote.md](remote.md) : le moteur partagé téléchargé une fois, les fichiers du jeu un par un), les sources
 navigables, un éditeur en ligne (brouillons, aperçu, push GitHub, fork). On s'y connecte avec GitHub ; un

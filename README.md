@@ -9,6 +9,9 @@
 **Un framework PHP pour créer des jeux rétro 2D** (SDL2) qui tournent **sur le bureau** (PHP natif) et
 **dans le navigateur** (PHP compilé en WebAssembly), avec exactement le même code.
 
+**Essayer sans rien installer : [jumphp.net](https://jumphp.net)**, le playground (les jeux, un bac à sable,
+la documentation et les tutoriels).
+
 Tiles et collisions au pixel (pentes, plateformes, cartes Tiled), entités et animations, caméra, son
 (fichiers ou sons générés), menus, sauvegardes, traductions, clavier / manette / tactile, multijoueur en
 ligne. **Tout passe par Docker** : la machine n'a besoin que de Docker (plus d'un écran et d'un serveur son
@@ -168,7 +171,7 @@ seulement dans `var/`.
 - [docs/api-web.md](docs/api-web.md) : OpenGL / WebGL, son 3D (OpenAL), mobile, cycle de vie de la page, HTTP asynchrone, PWA, manettes
 - [docs/portage.md](docs/portage.md) : porter un jeu PHP/SDL existant vers JumPHP
 - [docs/cpc.md](docs/cpc.md) : refaire un jeu Amstrad CPC depuis sa disquette, avec [dsk2jumphp](https://github.com/davidnurdin/dsk2jumphp)
-- [docs/portail.md](docs/portail.md) : le playground JumPHP (annuaire, éditeur, MCP) et les portails de jeux
+- [docs/portail.md](docs/portail.md) : le playground JumPHP ([jumphp.net](https://jumphp.net) : annuaire, éditeur, MCP) et les portails de jeux
 - [docs/remote.md](docs/remote.md) : les jeux distants (moteur partagé, fichiers un par un)
 
 ---
@@ -177,6 +180,9 @@ seulement dans `var/`.
 
 **A PHP framework to make retro 2D games** (SDL2) that run **on the desktop** (native PHP) and **in the
 browser** (PHP compiled to WebAssembly), with exactly the same code.
+
+**Try it without installing anything: [jumphp.net](https://jumphp.net)**, the playground (games, a sandbox,
+documentation and tutorials).
 
 Pixel-precise tiles and collisions (slopes, platforms, Tiled maps), entities and animations, camera, sound
 (files or generated sounds), menus, saves, translations, keyboard / gamepad / touch, online multiplayer.

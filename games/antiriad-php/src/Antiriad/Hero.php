@@ -19,7 +19,8 @@ final class Hero
 {
     public const W = 6;
     public const H = 42;
-    private const JUMP_FROM = 11;       // #66C8: fall table index a jump starts from: 8, 7, 6, 5, 4, 4, 3...
+    private const JUMP_FROM = 11;
+    private const JUMP_TO = 2;          // the last fall table index a jump goes up by       // #66C8: fall table index a jump starts from: 8, 7, 6, 5, 4, 4, 3...
 
     public const FRONT = 0x01;
     private const STAND_L = 0x02;
@@ -317,6 +318,11 @@ final class Hero
      */
     public function fall(int $room): ?string
     {
+        if ($this->rise > self::JUMP_FROM) {    // #66C8 -> #66CE: the take-off step goes forward only
+            $this->rise = self::JUMP_FROM;
+            $this->onGround = false;
+            return null;
+        }
         if ($this->rise >= 0) {                 // going up: the fall table backwards
             $speed = $this->world->fall[$this->rise];
             $moved = $this->up($room, $speed);
@@ -325,16 +331,19 @@ final class Hero
                 $this->rise = -1;
             } elseif ($moved === $speed) {
                 $this->rise--;
+                if ($this->rise < self::JUMP_TO) {   // #66CE: up 8, 7, 6, 5, 4, 4, 3, 3, 2, 2 (44 lines, emulator)
+                    $this->rise = -1;
+                }
             }
             if ($this->rise < 0) {
-                $this->fallIndex = 0;
+                $this->fallIndex = -1;          // down 1, 1, 1, 2, 2, 3... (emulator)
             }
             return null;
         }
         if ($this->flying) {
             return null;
         }
-        $speed = $this->world->fall[min($this->fallIndex, 16)];
+        $speed = $this->world->fall[max(0, min($this->fallIndex, 16))];
         $c = 0;
         while ($c < $speed && !$this->groundAt($room, $this->y + self::H + 1 + $c)) {
             $c++;
@@ -399,7 +408,7 @@ final class Hero
     public function jump(int $drift = 0): void
     {
         if ($this->onGround) {
-            $this->rise = self::JUMP_FROM;
+            $this->rise = self::JUMP_FROM + 1;
             $this->onGround = false;
             $this->drift = $drift;
             $this->setAnim($this->facing > 0 ? self::RISE_R : self::RISE_L);

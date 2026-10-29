@@ -300,11 +300,18 @@ final class Hero
         };
     }
 
-    /** #67B6: a wall in the column ahead (7 bytes on the right, Tal's own on the left). */
+    /**
+     * #67B6: a wall in the column ahead (x + 7 going right, x - 1 going left): pen 7 in 35 lines from y + 4
+     * on foot, 38 in the suit; the suit high up (y < #33, #6848) is stopped by anything drawn in the
+     * playfield's first 4 lines of that column.
+     */
     private function blocked(int $room, int $dir): bool
     {
-        $column = $dir > 0 ? $this->x + 7 : $this->x;
-        return $this->world->wallAt($room, $column, $this->y + 4, $this->y + 4 + ($this->inSuit ? 34 : 37));
+        $column = $dir > 0 ? $this->x + 7 : $this->x - 1;
+        if ($this->inSuit && $this->y < 0x33) {
+            return $this->world->topAt($room, $column);
+        }
+        return $this->world->wallAt($room, $column, $this->y + 4, $this->y + 4 + ($this->inSuit ? 37 : 34));
     }
 
     /** The ground test under the feet (#68B4: 6 mode 0 pixels from the right half of the first byte). */
@@ -356,10 +363,11 @@ final class Hero
             $this->onGround = false;
             $this->fallIndex = min($this->fallIndex + 1, 16);
         }
-        if ($this->y + self::H >= World::BOTTOM) {
-            if ($this->world->exit($room, 'down') !== null) {
-                return 'down';
-            }
+        $down = $this->world->exit($room, 'down') !== null;
+        if ($down && $this->y >= 0x9B) {        // #69BD: out through the bottom (the feet go under first)
+            return 'down';
+        }
+        if (!$down && $this->y + self::H >= World::BOTTOM) {
             $this->y = World::BOTTOM - self::H - 1;
             $this->onGround = true;
             $this->fallIndex = 0;

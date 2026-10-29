@@ -105,6 +105,15 @@ final class World
      * A pixel of pen 7 in screen byte $byte (0-79) between lines $from and $to: a wall (#67B6 scans the
      * column Tal walks into). The rooms' walls are hex strings of 80 bits per line.
      */
+    /** #6848: a pixel that is not black in the playfield's first 4 lines of screen byte $byte. */
+    public function topAt(int $room, int $byte): bool
+    {
+        if ($byte < 0 || $byte > 79) {
+            return false;
+        }
+        return (hexdec($this->rooms[$room]['top'][$byte >> 2]) & (8 >> ($byte & 3))) !== 0;
+    }
+
     public function wallAt(int $room, int $byte, int $from, int $to): bool
     {
         if ($byte < 0 || $byte > 79) {

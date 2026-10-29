@@ -184,11 +184,11 @@ final class Game
             return false;
         }
         $h = $this->hero;
-        match ($side) {
-            'right' => $h->x -= 64,
-            'left' => $h->x += 64,
-            'up' => $h->y += 128,
-            default => $h->y -= 128,
+        match ($side) {                           // #69C2...: fixed places in the next room
+            'right' => $h->x = 0x06,
+            'left' => $h->x = 0x44,
+            'up' => $h->y = 0x99,
+            default => $h->y = 0x1B,
         };
         $this->enterRoom($next);
         return true;
@@ -410,15 +410,19 @@ final class Game
 
     private function roomEdges(): void
     {
+        // #69A7: x < #05 left, x >= #45 right, y < #19 up (y >= #9B down: Hero::fall)
         $h = $this->hero;
-        if ($h->y < World::TOP && !$this->changeRoom('up')) {
+        $up = $this->world->exit($this->room, 'up') !== null;
+        if ($up && $h->y < 0x19) {
+            $this->changeRoom('up');
+        } elseif (!$up && $h->y < World::TOP) {
             $h->y = World::TOP;
             $h->rise = -1;
         }
-        if ($h->x >= 70 && !$this->changeRoom('right')) {
+        if ($h->x >= 0x45 && !$this->changeRoom('right')) {
             $h->x = 66;
         }
-        if ($h->x <= 2 && !$this->changeRoom('left')) {
+        if ($h->x < 0x05 && !$this->changeRoom('left')) {
             $h->x = 8;
         }
         if ($this->world->exit($this->room, 'right') === null) {

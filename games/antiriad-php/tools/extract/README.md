@@ -28,7 +28,8 @@ the tables of that dump; the music and sounds come from the AY log (`psg.py rend
 | `#9746` / `#978B` | per room: ranges of sub-tile numbers shifted by a 16-bit offset (the areas' tile sets) | `#7255`, `#7335` |
 | `#518F` / `#51D7` | room -> palette (14 of them), 7 pens each (1-7); `#8DF3` = the 16 pens | `#7139` |
 | `#68B4` | ground: on a line multiple of 8 (screen line), a pixel of pen 3 or 7 under the feet (6 pixels from x*2+3) | `#65D9` |
-| `#67B6` | walls: a byte with a pixel of pen 7 in the column ahead (x+7 going right, x going left), lines y+4 .. y+41 | `#5755`, `#5795` |
+| `#67B6` | walls: a byte with a pixel of pen 7 in the column ahead (x+7 going right, x-1 going left), 35 lines from y+4 on foot, 38 in the suit; the suit with y < #33: anything drawn in the playfield's first 4 lines (#6848) | `#5755`, `#5795` |
+| `#69A7` | room edges: x < #05 left (x = #44), x >= #45 right (x = 6), y < #19 up (y = #99), y >= #9B down (y = #1B) | emulator: room 63 -> 49 -> 48 -> 62 |
 | `#8EC2` | fall table: 1,1,2,2,3,3,4,4,5,6,7,8,8,9,9,10,10 lines per tick; a jump goes up it backwards from 8 | `#65B8`, `-w b404` during a jump (8,7,6,5,4,4,3...) |
 | `#9432` | sprites: 4 bytes each (address, width in source bytes, height); colour mask `#9332`; bit 7 of a sprite number = mirrored (`#73F0`). A screen byte whose source is 0 keeps the background. | `#6D3C` |
 | `#9021` | animations: [ticks, frames..., `#FC` loop / `#FD` hold / `#FE n` next / `#FF` kill] | `#6B45` |

@@ -134,6 +134,13 @@ def wall_rows(pens):
     return rows
 
 
+def top_columns(pens):
+    """#6848: the suit high up (y < #33) is stopped by any pixel that is not black in the playfield's first
+    4 lines of the column it moves into. One hex string of 80 bits (the screen bytes)."""
+    bits = ''.join('1' if any(pens[y][2 * b + k] for y in range(4) for k in (0, 1)) else '0' for b in range(80))
+    return '%020x' % int(bits, 2)
+
+
 def save_pens(pens, pal, path, width=None):
     h = len(pens)
     w = len(pens[0])
@@ -230,6 +237,7 @@ def main():
             'palette': pi,
             'ground': ground_rows(pens),
             'walls': wall_rows(pens),
+            'top': top_columns(pens),
             'ceiling': ceiling_rows(pens),
             'objects': [list(m[p + 1 + 4 * k:p + 5 + 4 * k]) for k in range(m[p])],
         })

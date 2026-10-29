@@ -28,6 +28,7 @@ final class PlayScene extends AbstractScene
     private Gfx $gfx;
     private Game $game;
     private Ticker $ticker;
+    private bool $humming = false;
     private float $acc = 0.0;
     private float $endTime = 0.0;
     private bool $demo = false;
@@ -47,6 +48,19 @@ final class PlayScene extends AbstractScene
         $this->sound()->stopMusic();
         $this->flushMessages();
         $this->makeScanner();
+        $this->humming = false;
+        $this->sound()->stopSfx('teleport');
+    }
+
+    public function exit(): void
+    {
+        $this->sound()->stopSfx('teleport');
+        $this->humming = false;
+    }
+
+    public function pause(): void
+    {
+        $this->exit();                            // the hum starts again with the next update()
     }
 
     private const SCANNER_FRAMES = 6;
@@ -110,6 +124,11 @@ final class PlayScene extends AbstractScene
                 $g->messages[] = 20;
             }
             $this->flushMessages();
+        }
+        $hum = $g->hum && !$g->over && !$g->won;
+        if ($hum !== $this->humming) {
+            $hum ? $this->sound()->playSfx('teleport', -1) : $this->sound()->stopSfx('teleport');
+            $this->humming = $hum;
         }
         if ($this->acc > Game::TICK) {
             $this->acc = 0.0;

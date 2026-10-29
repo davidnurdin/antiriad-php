@@ -39,6 +39,7 @@ ogg() {  # ogg <psg.bin> <from> <to> <out.ogg> [trim]: AY log -> mono Ogg (trim:
   python3 -I "$HERE/psgcal.py" "$1" "$2" "$3" "$WORK/cal.bin"
   python3 -I "$PSG" render "$WORK/cal.bin" 0 $(( $3 - $2 + 2 )) "$WORK/tmp.wav" >/dev/null
   local af=atrim=start=0.04,asetpts=PTS-STARTPTS,apad=pad_dur=0.15   # padded: Vorbis drops a lone 80 ms
+  [ "${5:-}" = loop ] && af=atrim=start=0.04,asetpts=PTS-STARTPTS   # exact length: played in a loop
   [ "${5:-}" = lead ] && af="atrim=start=0.04,asetpts=PTS-STARTPTS,silenceremove=start_periods=1:start_threshold=-70dB,apad=pad_dur=0.15"
   [ "${5:-}" = trim ] && af="atrim=start=0.04,asetpts=PTS-STARTPTS,areverse,silenceremove=start_periods=1:start_threshold=-70dB,areverse,apad=pad_dur=0.15"
   ffmpeg -loglevel error -y -i "$WORK/tmp.wav" -af "$af" -ac 1 -c:a libvorbis -q:a 2 "$4"
@@ -79,7 +80,6 @@ sound suit 100 "2:04" lead     # #6147: the suit comes to life (it starts 48 fra
 sound message 25 "0:07"        # #5EF7: a message starts
 sound enter 75 "1:0e 2:0f" trim     # #60C4: Tal gets into the suit (a hum swelling and dying away, 72 frames)
 sound activate 120 "0:05 1:06" trim # #6085: the suit is brought to life (the boots)
-sound teleport 60 "2:0d" trim       # #7184: a room with a teleporter (#29)
 sound death 82 "0:10 1:11 2:12"        # #5816: Tal dies
 sound victory 1150 "0:17 1:18 2:19"    # #5C3E: the base is destroyed
 # #61A6: out of the suit, cut from a real game: start in room 63 on the suit (#58E0 / #58EB, #B403-#B404),
@@ -94,4 +94,8 @@ ogg "$WORK/hurt/psg.bin" 1126 1175 "$ASSETS/sfx/hurt.ogg"
 # #5547: a saucer's whoosh (noise on channel B swelling and dying away, 85 frames): room 3
 run saucer 1180 -k '780:joy_fire+,820:joy_fire-' -F 700:5572=00 -F 700:58e0=03 -F 700:58eb=03
 ogg "$WORK/saucer/psg.bin" 1089 1173 "$ASSETS/sfx/saucer.ogg"
+# #7184: a teleporter's room hums as long as Tal is in it (sound #0D on channel C, a 21-frame cycle):
+# 4 cycles from room 61, played in a loop
+run teleport 900 -k '780:joy_fire+,820:joy_fire-' -F 700:5572=00 -F 700:58e0=3d -F 700:58eb=3d
+ogg "$WORK/teleport/psg.bin" 806 890 "$ASSETS/sfx/teleport.ogg" loop
 echo "done: $ASSETS"

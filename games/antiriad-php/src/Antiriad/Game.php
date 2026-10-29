@@ -65,6 +65,8 @@ final class Game
     private ?Actor $missile = null;
     /** ticks left of Tal getting into the suit (#5D9E: 12, Tal and the suit flickering), -1: no */
     public const ENTER_TICKS = 21;
+    /** a teleporter's room: its hum loops */
+    public bool $hum = false;
     /** ticks left of Tal's fading into the suit, -1 = not getting in */
     public int $entering = -1;
     private ?Actor $enteringSuit = null;
@@ -145,9 +147,10 @@ final class Game
         if (!$this->hero->inSuit && $this->suit[0] === $room) {
             $this->actors[] = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
         }
+        $this->hum = false;
         foreach ($this->actors as $a) {
-            if ($a->type === 0x29) {             // #7182: a teleporter's room
-                $this->sound('teleport');
+            if ($a->type === 0x29) {             // #7182: a teleporter's room hums (#0D) while Tal is in it
+                $this->hum = true;
                 break;
             }
         }

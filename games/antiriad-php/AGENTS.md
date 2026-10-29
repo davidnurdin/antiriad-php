@@ -44,13 +44,15 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   the boots it hangs in the air, up / down move it. The first time in, the dashboard starts (#8E12
   flicker, then score, dial, bars a unit a tick); it is lit (`hud-lit.png`, `sprites-PP-lit.png`: pens
   13-15 of the suit) while Tal is inside.
+- **Dashboard** (#5DFC / #6FBE): bars of v + 1 pixels, 4 lines, red then cyan past 16; the signs ('z', the
+  dial's 'x'...'r') go through #8B3D like the texts; the scanner is noise; messages in x 120-208.
 - **Phones**: a floating stick (`touch: pad: stick`), A = fire, B = suit.
 - **Controls** (`config/input.yaml`): arrows, up / Z = jump (thrust in the suit), Space = throw / fire,
   down = crouch / pick up, E = in / out of the suit (also), Escape = pause.
 - **Test params** of `PlayScene`: `room`, `x`, `y`, `suit`, `energy`, `modules` (list), `lives`, `demo`.
 - **Sprites** face left in the sheets; bit 7 mirrors them (facing right). #73F0 mirrors sprite bytes in place (state in #93B2): export.py turns them back.
 - **Sounds** where the original plays them (`tools/extract/extract.sh`): steps on walk frames 0 and 4
-  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room, a saucer's whoosh
+  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room (its hum loops while Tal is there), a saucer's whoosh
   (when an animation reaches sprite #6E). Played alone through #752A some lose their envelope: hurt, saucer
   and leave are cut from real games instead. The cave radiation sound (#6F66) is not extracted yet.
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

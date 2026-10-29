@@ -15,7 +15,7 @@ final class Assets
     private static ?CpcFont $font = null;
 
     private const SFX = ['shoot', 'pickup', 'hurt', 'hit', 'step', 'beam', 'suit', 'message',
-        'enter', 'leave', 'activate', 'teleport', 'saucer', 'rad2', 'rad3', 'rad4'];
+        'enter', 'leave', 'activate', 'teleport', 'saucer', 'rad2', 'rad3', 'rad4', 'regen'];
 
     public static function boot(Engine $engine): World
     {
@@ -31,7 +31,7 @@ final class Assets
             // menus: soft short notes (the game's own effects are too harsh there)
             $sound->synth('menu_move', Synth::tone(660, 0.04, 'triangle', 0.25));
             $sound->synth('menu_confirm', Synth::sequence([[523, 0.05], [784, 0.08]], 'triangle', 0.3));
-            foreach (['title', 'death', 'victory'] as $name) {
+            foreach (['title', 'victory'] as $name) {
                 $sound->loadMusic($name, "assets/music/$name.ogg");
             }
         }

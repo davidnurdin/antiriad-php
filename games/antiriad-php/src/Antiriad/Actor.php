@@ -35,6 +35,13 @@ final class Actor
     public int $flash = 0;
     /** shots: ticks left, owner damage */
     public int $life = 0;
+    /** shots: ticks lived; a stone spends its first tick where it was thrown (#6905: tested there, then moved) */
+    public int $age = 0;
+    /**
+     * A stone's size for the hits (bytes, lines): for its first 4 ticks, the size the shot's slot had
+     * (#B413 + 15 / 16, set when a sprite is drawn there: none at first, a stone's, or a burst's 6 x 18).
+     */
+    public ?array $hitSize = null;
 
     private ?array $program = null;
     private int $step = 0;
@@ -151,6 +158,9 @@ final class Actor
         if ($this->flash > 0) {
             $this->flash--;
         }
+        if ($this->kind === self::SHOT && $this->hitSize !== null && $this->age++ === 0) {
+            return;
+        }
         $this->runProgram();
         $this->move($heroX, $heroY);
         $this->runAnim();
@@ -185,8 +195,11 @@ final class Actor
     private function move(int $heroX, int $heroY): void
     {
         $dirs = $this->dirs;
-        if ($dirs === 0x0F) {                   // #6CDE: towards Tal
-            $dirs = ($heroX > $this->x ? 8 : ($heroX < $this->x ? 4 : 0)) | ($heroY > $this->y ? 2 : ($heroY < $this->y ? 1 : 0));
+        if ($dirs === 0x0F) {                   // #6CDE: towards Tal's middle (x - 3, y + 12), 4 lines of slack
+            $tx = $heroX - 3;
+            $ty = $heroY + 12;
+            $dirs = ($tx > $this->x ? 8 : ($tx < $this->x ? 4 : 0))
+                | (abs($ty - $this->y) < 4 ? 0 : ($ty > $this->y ? 2 : 1));
         }
         $w = $this->width();
         $h = $this->height();
@@ -211,6 +224,12 @@ final class Actor
         // #6C43...: the screen's bytes and the 0-255 lines bound them; what falls off the playfield is gone
         $this->x = max(0, min(80 - $w, $this->x));
         $this->y = max(0, min(255 - $h, $this->y));
+    }
+
+    /** [w, h] the hits use (#5937): a stone's slot size for its first ticks, else its sprite's (bytes, lines). */
+    public function hitSize(): array
+    {
+        return $this->hitSize !== null && $this->age <= 4 ? $this->hitSize : [$this->width(), $this->height()];
     }
 
     /** On the playfield (objects above or under it are out of play). */

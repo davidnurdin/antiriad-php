@@ -63,6 +63,10 @@ final class Game
     private ?Actor $leader = null;
     /** its missile (the original's first free slot after the room's objects): one at a time */
     private ?Actor $missile = null;
+    /** the shot's slot (#B413): the stone, then its burst; and the size its last sprite left there */
+    private ?Actor $shot = null;
+    /** @var array{int, int} */
+    private array $shotSize = [0, 0];
     /** ticks left of Tal getting into the suit (#5D9E: 12, Tal and the suit flickering), -1: no */
     public const ENTER_TICKS = 21;
     /** #6235: main loop turns before a teleporter brings the room's other objects */
@@ -315,6 +319,7 @@ final class Game
         if ($this->entering < 0) {
             $this->collisions($in);
         }
+        $this->shotSlot();
         $this->actors = array_values(array_filter($this->actors, fn (Actor $a) => !$a->dead));
         if ($this->tick % self::PERIOD === 0) {
             $this->periodic();
@@ -470,6 +475,21 @@ final class Game
         $this->actors[] = $this->missile;
     }
 
+    /** #B413 + 15 / 16: the shot's slot keeps the size of the last sprite drawn in it (a stone shows from its 5th tick). */
+    private function shotSlot(): void
+    {
+        $s = $this->shot;
+        if ($s === null) {
+            return;
+        }
+        if ($s->kind === Actor::FX || $s->age > 4) {
+            $this->shotSize = [$s->width(), $s->height()];
+        }
+        if ($s->dead) {
+            $this->shot = null;
+        }
+    }
+
     private function useEnergy(int $n): void
     {
         $this->energy = max(0, $this->energy - $n);
@@ -526,6 +546,8 @@ final class Game
         $a->kind = Actor::SHOT;
         $a->damage = 1;                           // #5D2B: a stone takes one hit, the pulse beam two
         $a->life = 60;
+        $a->hitSize = $this->shotSize;            // #5937: tested where it leaves the hand, with the slot's old size
+        $this->shot = $a;
         $this->actors[] = $a;                     // silent in the original
     }
 
@@ -544,33 +566,46 @@ final class Game
 
     // ---------------------------------------------------------------- contacts
 
-    private static function overlap(array $a, array $b): bool
+    /**
+     * #5937: two objects touch when they are closer than the width of the left one (bytes) and the height
+     * of the upper one (lines). [x, y, w, h] each; the hanging beast (#2F) only when Tal is right of it.
+     */
+    private function touch(array $a, Actor $b): bool
     {
-        return $a[0] < $b[0] + $b[2] && $b[0] < $a[0] + $a[2] && $a[1] < $b[1] + $b[3] && $b[1] < $a[1] + $a[3];
+        if (($b->animId() & 0x7F) === 0x2F && $this->hero->x < $b->x) {
+            return false;
+        }
+        [$bw, $bh] = [$b->width(), $b->height()];
+        $w = $a[0] >= $b->x ? $bw : $a[2];
+        $h = $a[1] >= $b->y ? $bh : $a[3];
+        return abs($a[0] - $b->x) < $w && abs($a[1] - $b->y) < $h;
     }
 
     private function collisions(array $in): void
     {
         $h = $this->hero;
-        $hb = $h->box();
+        $hb = [$h->x, $h->y, Hero::W, Hero::H];
         foreach ($this->actors as $a) {
             if ($a->dead) {
                 continue;
             }
             if ($a->kind === Actor::SHOT) {
                 foreach ($this->actors as $e) {
-                    if ($e->kind === Actor::ENEMY && !$e->dead && !$e->fading() && self::overlap($a->box(), $e->box())) {
+                    if ($e->kind === Actor::ENEMY && !$e->dead && !$e->fading() && $this->touch([$a->x, $a->y, ...$a->hitSize()], $e)) {
                         $this->hitEnemy($e, $a->damage);
                         $a->dead = true;              // #5D6F: the shot bursts (#2D) where it is
                         $fx = new Actor($this->world, 0x2D, $a->x, max(World::TOP, $a->y - 4));
                         $fx->kind = Actor::FX;
                         $this->actors[] = $fx;
+                        if ($a === $this->shot) {
+                            $this->shot = $fx;
+                        }
                         break;
                     }
                 }
                 continue;
             }
-            if ($a->fading() || !$a->visible() || !self::overlap($hb, $a->box())) {
+            if ($a->fading() || !$a->visible() || !$this->touch($hb, $a)) {
                 continue;
             }
             switch ($a->kind) {
@@ -660,9 +695,8 @@ final class Game
 
     private function die(): void
     {
-        $this->hero->die();
+        $this->hero->die();                       // the bite's sound only: the tune is for getting up
         $this->dyingTicks = 0;
-        $this->sound('death');
     }
 
     /** #15: a regeneration: Tal gets up where he fell, his life full again; the room goes on as it was. */
@@ -677,6 +711,7 @@ final class Game
         $this->say([1 => 5, 2 => 4, 3 => 3][$this->lives] ?? 2);
         $h = $this->hero;
         $h->getUp();
+        $this->sound('regen');                    // #10-#12 on the three channels, as he gets up
         $this->life = self::MAX_LIFE;
         if ($this->room <= 1 && !$this->modules[self::NEGATOR]) {
             // the base kills at once without the negator: get up in the suit's room instead

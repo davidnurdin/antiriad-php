@@ -69,7 +69,7 @@ sound() {  # sound <name> <frames> "ch:id ..." [trim|lead]: frames = until the c
   for i in "${!stub[@]}"; do args+=(-F "1100:$(printf '%04x' $((0xa600 + i)))=${stub[$i]}"); done
   run "snd-$name" $((1101 + frames + 10)) "${SFXPLAY[@]}" "${args[@]}" -F 1100:a630=00 -F 1101:54fb=00 -F 1101:54fc=a6
   local out="$ASSETS/sfx/$name.ogg"
-  case $name in victory|death) out="$ASSETS/music/$name.ogg"; chans=ABC;; activate) chans=ABC;; esac
+  case $name in victory) out="$ASSETS/music/$name.ogg"; chans=ABC;; activate|regen) chans=ABC;; esac
   ogg "$WORK/snd-$name/psg.bin" 1101 $((1101 + frames)) "$out" "${4:-}" "$chans"
 }
 echo "sound effects..."
@@ -87,7 +87,7 @@ sound rad3 24 "1:1c"
 sound rad4 24 "1:1d"
 sound enter 75 "1:0e 2:0f" trim     # #60C4: Tal gets into the suit (a hum swelling and dying away, 72 frames)
 sound activate 120 "2:05 3:06" trim # #6085 / #608C: the suit is brought to life (the boots)
-sound death 82 "0:10 1:11 2:12"        # #5816: Tal dies
+sound regen 82 "0:10 1:11 2:12"        # #5816 -> #15: Tal gets up again (a regeneration)
 sound victory 1150 "0:17 1:18 2:19"    # #5C3E: the base is destroyed
 # #61A6: out of the suit, cut from a real game: start in room 63 on the suit (#58E0 / #58EB, #B403-#B404),
 # in at once (#6094), left at frame 1400 steps out: the hum then sounds on channel B alone (frames 1403-1475)

@@ -44,9 +44,16 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   room materialises (`Actor::appear`), a killed enemy fades away (`vanish`); the shot bursts (#2D).
 - **Teleporters** (#29, a room's first object, #7192 / #6235): the objects after it wait 40 ticks, it fades
   away, then they come (materialising); shot down before, it brings none. It hums (#0D, a loop) while it is there.
+- **Hits** (#5937): two objects touch when closer than the left one's width and the upper one's height.
+  The stone is tested where it leaves the hand (x + 6, y + 6) before it moves, with the size the shot's
+  slot kept from its last sprite for its first 4 ticks (none at first, a stone's, a burst's 6 x 18): after a
+  burst, a monster coming within 12 bytes is hit at once (the original's close kills).
+- **Homing** (#6CDE, programs 31-33): monsters aim at Tal's x - 3, y + 12, 4 lines of slack (they sit at
+  his middle, under a standing throw).
 - **Kept bugs**: throwing again and again with the way held against a wall moves Tal a byte each
   throw, no wall test (`Hero::control`): he goes through walls, as in the original.
-- **Death** (#5816): 32 ticks (107 frames), a jump or fall goes on, the room keeps moving; then #15.
+- **Death** (#5816): 32 ticks (107 frames), a jump or fall goes on, the room keeps moving; then #15 (he gets
+  up) with the regeneration tune (#10-#12, `sfx/regen.ogg`); the death itself only has the bite's sound.
 - **The suit**: #17 (just in / come down facing the player: left / right steps out), #16, #18-#1B; with
   the boots it hangs in the air, up / down move it. The first time in, the dashboard starts (#8E12
   flicker, then score, dial, bars a unit a tick); it is lit (`hud-lit.png`, `sprites-PP-lit.png`: pens

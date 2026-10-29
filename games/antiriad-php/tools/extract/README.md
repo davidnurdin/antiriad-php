@@ -33,7 +33,8 @@ the tables of that dump; the music and sounds come from the AY log (`psg.py rend
 | `#8EC2` | fall table: 1,1,2,2,3,3,4,4,5,6,7,8,8,9,9,10,10 lines per tick; a jump goes up it backwards from 8 | `#65B8`, `-w b404` during a jump (8,7,6,5,4,4,3...) |
 | `#9432` | sprites: 4 bytes each (address, width in source bytes, height); colour mask `#9332`; bit 7 of a sprite number = mirrored (`#73F0`). A screen byte whose source is 0 keeps the background. | `#6D3C` |
 | `#9021` | animations: [ticks, frames..., `#FC` loop / `#FD` hold / `#FE n` next / `#FF` kill] | `#6B45` |
-| `#97F8` | movement programs: steps [directions, ticks, dx, dy], `#0F` = towards Tal (`#6CDE`) | `#6BC8` |
+| `#97F8` | movement programs: steps [directions, ticks, dx, dy], `#0F` = towards Tal (`#6CDE`: his x - 3, y + 12, 4 lines of slack) | `#6BC8` |
+| `#5937` | contacts of slots 0 (Tal) and 1 (the shot) with slots 2-7: closer than the left one's width (`+15` x 2 bytes) and the upper one's height (`+16`); sizes are those of the last sprite drawn in the slot; results in `#B502` / `#B508` | `#5CD7`, `#5D06` |
 | `#922A` | object types, 4 bytes (type 1 first): byte 0 bit 6 = enemy, bit 5 + bits 4-0 = handler (`#9216`: 0 cell, 1-4 modules, 5 nothing, 6 suit, 7 teleporter, 8 energy beam, 9 the core); byte 1 bits 7-5 = hits, bits 4-0 = bite; byte 2 = score | `#59C8`, `#5B97` |
 | `#9BC7` | objects of each room: [count, (x, y, program, type)...] | `#7160` |
 | `#8F14` | the 4 modules: (room, x, y) of the boots, pulse beam, implosion mine, particle negator; flags `#B519-#B51C` | `#71CD`, handlers `#5A2D`... |
@@ -42,5 +43,5 @@ the tables of that dump; the music and sounds come from the AY log (`psg.py rend
 | `#B4FB` / `#B4FD` | Tal's life / the suit's energy (31 each); `#B4F1` = 0 in the suit | `#5B9B`, `#6F14` (every 100 frames: heals in the suit, the base drains it, caves zones `#8B37` irradiate Tal) |
 | `#7113` | rooms 0-1 without the negator: life = 0, message 18 | |
 | `#5EA0` | messages (`#A093`, '$' ends) scrolled in the dashboard; font `#0400` (mode 1, 16 bytes a glyph, codes: A-Z = 1-26, digits = `#22`.., signs `#8B3D` -> `#8B50`) | `#6FBE`, `#701E` |
-| `#752A` | sound player: A = channel, L = sound. `extract.sh` hooks a stub at `#A600` on the main loop's `CALL #69A7` to call it once. 1-3 title music, 4 suit, 7 message, `#0B` shot, `#0C` pickup, `#10-#12` death, `#13` hurt, `#15` step, `#16` beam, `#17-#19` victory, `#1E` enemy hit | xref of `CALL #752A` |
+| `#752A` | sound player: A = channel, L = sound. `extract.sh` hooks a stub at `#A600` on the main loop's `CALL #69A7` to call it once. 1-3 title music, 4 suit, 7 message, `#0B` shot, `#0C` pickup, `#10-#12` regeneration (Tal gets up), `#13` hurt, `#15` step, `#16` beam, `#17-#19` victory, `#1E` enemy hit | xref of `CALL #752A` |
 | `#7A5D` | the title tune's order pointer: back to its start every 5780 frames (115.6 s), from frame 665 | `-w 7a5b-7a88` |

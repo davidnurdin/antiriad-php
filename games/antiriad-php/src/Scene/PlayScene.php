@@ -117,7 +117,7 @@ final class PlayScene extends AbstractScene
             $g->tick($this->demo ? $this->bot() : $this->controls());
             $this->latch = [];
             foreach ($g->sounds as $s) {
-                $s === 'death' ? $this->sound()->playMusic('death', false) : $this->sound()->playSfx($s);
+                $this->sound()->playSfx($s);
             }
             if ($g->won && !$wasWon) {
                 $this->sound()->playMusic('victory', false);

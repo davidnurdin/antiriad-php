@@ -4,20 +4,23 @@
 //  - The game's screen while it runs (JUMPHP_LIVE: the engine rewrites var/live/frame.png, the pane swaps it in),
 //    the pictures `bin/jumphp shot` / `siteshot` write and those Claude reads (Read of a .png).
 //  - The playground (MCP jumphp): its PHPUnit runs, its publications.
-//  - Buttons: run the tests or take a screenshot now (here, live), ask Claude to fix; a field to tell Claude.
+//  - The game tests (JumPHP\Testing\GameTestCase: a test plays the game): each one as it runs, its last frame.
+//  - Buttons: run the tests or take a screenshot now (here, live), at the game's speed or fast, ask Claude to fix;
+//    a field to tell Claude.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register } from 'claude-code'
 
-import type { Check, Remote, Shot, Stage, Where } from '../types'
+import type { Check, GameTest, Remote, Shot, Stage, View, Where } from '../types'
 
 const PANE = 'jumphp-live'
 const TITLE = 'JumPHP'
 const MAX_LOG = 12_000
 
-const check = atom({ plugin: 'jumphp-live', key: 'check' } as const, null as Check | null, { shape: 'check-2' })
+const check = atom({ plugin: 'jumphp-live', key: 'check' } as const, null as Check | null, { shape: 'check-3' })
 const shots = atom({ plugin: 'jumphp-live', key: 'shots' } as const, [] as Shot[], { shape: 'shots-1' })
 const remote = atom({ plugin: 'jumphp-live', key: 'remote' } as const, null as Remote | null, { shape: 'remote-1' })
 const where = atom({ plugin: 'jumphp-live', key: 'where' } as const, { root: '', game: '' } as Where, { shape: 'where-1' })
+const view = atom({ plugin: 'jumphp-live', key: 'view' } as const, { selected: '', isRealtime: true } as View, { shape: 'view-1' })
 
 /** a bin/jumphp command that checks or pictures a game: its kind and game */
 const JUMPHP = /(?:^|[\s;&|(])(?:\.\/)?bin\/jumphp\s+(test|shot|siteshot|webshot)\b[ \t]*([\w.-]*)/
@@ -50,6 +53,38 @@ export function resultOf(log: string): { summary: string; failures: string[] } {
   return { summary: summaries.at(-1)?.[1] ?? '', failures: [...new Set(failures)].slice(0, 8) }
 }
 
+/** PHPUnit's testdox name of a test method: testThePaddleGoesDown → The paddle goes down */
+export function labelOf(name: string): string {
+  const words = (name.split('::')[1] ?? name).replace(/^test_?/, '').replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2').trim().toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * The game tests of a run: `[jumphp-test] start <test>` / `[jumphp-test] frame <test> <file>` (JumPHP's Game,
+ * the file relative to the live picture's folder; PHPUnit's progress dots may lead the line), then PHPUnit's
+ * testdox marks (✔ / ✘ <label>).
+ */
+export function testsOf(log: string, live: string): GameTest[] {
+  const dir = live.replace(/\/[^/]+$/, '')
+  const tests = new Map<string, GameTest>()
+  for (const m of log.matchAll(/\[jumphp-test\] (start|frame) (\S+)(?: (\S+))?$/gm)) {
+    const name = m[2] ?? ''
+    const known = tests.get(name)
+    if (m[1] === 'start') {
+      tests.set(name, { name, label: labelOf(name), status: 'run', frame: '' })
+    } else if (known) {
+      const file = m[3] ?? ''
+      tests.set(name, { ...known, status: 'done', frame: file.startsWith('/') ? file : dir !== '' && file !== '' ? `${dir}/${file}` : '' })
+    }
+  }
+  const marks = new Map<string, GameTest['status']>()
+  for (const m of log.matchAll(/^\s*([✔✘])\s+(.+?)\s*$/gm)) {
+    marks.set((m[2] ?? '').toLowerCase(), m[1] === '✔' ? 'ok' : 'fail')
+  }
+  return [...tests.values()].map(t => ({ ...t, status: marks.get(t.label.toLowerCase()) ?? t.status }))
+}
+
 /** absolute paths of pictures in an output (bin/jumphp shot prints the file it wrote) */
 export function picturesIn(log: string): string[] {
   return [...new Set([...log.matchAll(/(\/[^\s'"]+\.(?:png|jpe?g|webp))\b/gi)].map(m => m[1] ?? ''))]
@@ -63,7 +98,7 @@ let isWatching = false
 
 async function begin($: Engine, kind: string, game: string, by: Check['by']): Promise<void> {
   const at = await $.clock.now()
-  await update($, check, (): Check => ({ game, kind, by, status: 'running', stages: [], log: '', summary: '', failures: [], live: '', at }))
+  await update($, check, (): Check => ({ game, kind, by, status: 'running', stages: [], log: '', summary: '', failures: [], live: '', tests: [], at }))
   if (game) {
     await update($, where, w => ({ ...w, game }))
   }
@@ -72,8 +107,13 @@ async function begin($: Engine, kind: string, game: string, by: Check['by']): Pr
 }
 
 function progress($: Engine, log: string): Promise<unknown> {
-  const live = LIVE.exec(log)?.[1] ?? ''
-  return update($, check, c => (c ? { ...c, log: clip(log), stages: stagesOf(log, 'running'), live: c.live || live } : c))
+  return update($, check, c => {
+    if (!c) {
+      return c
+    }
+    const live = c.live || (LIVE.exec(log)?.[1] ?? '')
+    return { ...c, log: clip(log), stages: stagesOf(log, 'running'), live, tests: testsOf(log, live) }
+  })
 }
 
 /** while a run goes on, the live picture swapped in the pane a few times a second (no redraw) */
@@ -107,7 +147,10 @@ async function finish($: Engine, log: string, isOk: boolean): Promise<void> {
     }
     // a test passes when bin/jumphp says so; a picture when the command ended well
     const status: Check['status'] = isOk && (c.kind !== 'test' || text.includes('all checks passed')) ? 'passed' : 'failed'
-    return { ...c, status, log: clip(text), stages: stagesOf(text, status), ...resultOf(text) }
+    // a test still running when the run ended did not end well (a crash, a timeout)
+    const live = c.live || (LIVE.exec(text)?.[1] ?? '')
+    const tests = testsOf(text, live).map((t): GameTest => (t.status === 'run' ? { ...t, status: 'fail' } : t))
+    return { ...c, status, log: clip(text), stages: stagesOf(text, status), live, tests, ...resultOf(text) }
   })
   for (const path of picturesIn(text)) {
     await addShot($, path)
@@ -155,10 +198,11 @@ async function runHere($: Engine, kind: 'test' | 'shot'): Promise<void> {
     return
   }
   await begin($, kind, game, 'you')
+  const { isRealtime } = await read($, view)
   let log = ''
   let code = 1
   try {
-    const run = $.process.spawn({ argv: ['bin/jumphp', kind, game], cwd: root || undefined, env: { JUMPHP_LIVE: '1' } })
+    const run = $.process.spawn({ argv: ['bin/jumphp', kind, game], cwd: root || undefined, env: { JUMPHP_LIVE: '1', ...(isRealtime ? { JUMPHP_REALTIME: '1' } : {}) } })
     for (;;) {
       const piece = await run.next()
       if (piece.done) {
@@ -200,7 +244,8 @@ export const register: Register = on => {
     const file = `/tmp/jumphp-live-${at}-${Math.floor(Math.random() * 1e6)}.log`
     await begin($, m[1] ?? 'test', m[2] || (await read($, where)).game, 'claude')
     const live = follow($, file)
-    const ran = await next({ ...e, command: `{ export JUMPHP_LIVE=1\n${e.command}\n} 2>&1 | tee ${file}; ( exit \${PIPESTATUS[0]} )` })
+    const env = (await read($, view)).isRealtime ? 'export JUMPHP_LIVE=1 JUMPHP_REALTIME=1' : 'export JUMPHP_LIVE=1'
+    const ran = await next({ ...e, command: `{ ${env}\n${e.command}\n} 2>&1 | tee ${file}; ( exit \${PIPESTATUS[0]} )` })
     await live.stop()
     const result = 'result' in ran && ran.result ? (ran.result as { stdout?: string; stderr?: string }) : {}
     await finish($, `${result.stdout ?? ''}\n${result.stderr ?? ''}`, ran.deny === undefined && ran.isError !== true)
@@ -247,12 +292,17 @@ export const register: Register = on => {
     const pictures = await read($, shots)
     const r = await read($, remote)
     const { game } = await read($, where)
+    const { selected, isRealtime } = await read($, view)
     const width = Math.max(20, e.props.bodyColumns ?? 60)
     const color = (s: string) => (s === 'passed' || s === 'ok' ? 'success' : s === 'failed' || s === 'fail' || s === 'error' ? 'error' : 'warning')
     const mark = (s: Stage['status']) => (s === 'ok' ? '✔' : s === 'fail' ? '✘' : '…')
     const logLines = c ? c.log.split('\n').filter(l => l.trim() !== '').slice(c.status === 'running' ? -8 : -4) : []
     const shot = pictures[0]
     const isLive = c !== null && c.status === 'running' && c.live !== ''
+    const tests = c?.tests ?? []
+    const running = tests.findLast(t => t.status === 'run')
+    const chosen = tests.find(t => t.name === selected && t.frame !== '') ?? null
+    const testMark = (t: GameTest) => (t.status === 'ok' ? '✔' : t.status === 'fail' ? '✘' : t.status === 'run' ? '⏳' : '·')
     const Image = e.surface === 'terminal' && 'Image' in ui ? ui.Image : null
     const imageColumns = Math.min(width, 72)
     const imageRows = Math.max(4, Math.round(imageColumns * 9 / 32))
@@ -276,6 +326,11 @@ export const register: Register = on => {
             {logLines.map(line => <Text dimColor wrap="truncate-end">{line}</Text>)}
           </Box>
         )}
+        {tests.length > 0 && <Text bold>Game tests</Text>}
+        {tests.map((t, i) => (
+          <Button key={`gt-${i}`} label={`${testMark(t)} ${t.label}${t.name === chosen?.name ? '  ◂' : ''}`}
+            onPress={() => update($, view, v => ({ ...v, selected: v.selected === t.name ? '' : t.name }))} />
+        ))}
         {r && (
           <Text>
             <Text dimColor>playground {r.tool}: </Text>
@@ -286,14 +341,19 @@ export const register: Register = on => {
         {isLive && Image && (
           <Image key="live" source={{ file: c.live, format: 'png', generation: liveGeneration }} columns={imageColumns} rows={imageRows} alt="the game, live" />
         )}
-        {isLive && <Text color="error" bold>● live</Text>}
-        {!isLive && shot && Image && (
+        {isLive && <Text><Text color="error" bold>● live</Text><Text dimColor> {running ? running.label : c.stages.at(-1)?.name ?? ''}</Text></Text>}
+        {!isLive && chosen && Image && (
+          <Image key="test" source={{ file: chosen.frame, format: 'png', generation: c?.at ?? 0 }} columns={imageColumns} rows={imageRows} alt={chosen.frame} />
+        )}
+        {!isLive && chosen && <Text dimColor>last frame of: {chosen.label}</Text>}
+        {!isLive && !chosen && shot && Image && (
           <Image key="shot" source={{ file: shot.path, format: 'png', generation: shot.n }} columns={imageColumns} rows={imageRows} alt={shot.path} />
         )}
-        {!isLive && shot && <Text dimColor wrap="truncate-start">{shot.path}</Text>}
+        {!isLive && !chosen && shot && <Text dimColor wrap="truncate-start">{shot.path}</Text>}
         <Box flexDirection="row" gap={1}>
           <Button key="test" label="▶ Tests" hotkey="t" onPress={() => void runHere($, 'test')} />
           <Button key="shot" label="📸 Shot" hotkey="s" onPress={() => void runHere($, 'shot')} />
+          <Button key="speed" label={isRealtime ? '🐢 Game speed' : '⏩ Fast'} hotkey="r" onPress={() => update($, view, v => ({ ...v, isRealtime: !v.isRealtime }))} />
           {c?.status === 'failed' && (
             <Button key="fix" label="🛠 Ask Claude to fix" hotkey="f" onPress={async () => {
               const what = [c.stages.find(s => s.status === 'fail')?.name, ...c.failures.slice(0, 5)].filter(Boolean).join('; ')

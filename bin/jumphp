@@ -296,6 +296,7 @@ cmd_test() {
   fi
   local dir; dir="$(game_dir "$target")"
   ensure_vendor "$dir"
+  live_announce
   say "$dir: php -l"
   php_run "$dir" -- sh -c 'find src app.php -name "*.php" -print0 | xargs -0 -n1 php -l >/dev/null'
   if [ -f "$ROOT/$dir/phpstan.neon" ] && [ -x "$ROOT/engine/vendor/bin/phpstan" ]; then
@@ -304,9 +305,8 @@ cmd_test() {
   fi
   if [ -d "$ROOT/$dir/tests" ] && [ -x "$ROOT/engine/vendor/bin/phpunit" ]; then
     say "$dir: phpunit"
-    php_run "$dir" -e SDL_VIDEODRIVER=dummy -e SDL_AUDIODRIVER=dummy -- /workspace/engine/vendor/bin/phpunit --bootstrap vendor/autoload.php tests
+    php_run "$dir" -e SDL_VIDEODRIVER=dummy -e SDL_AUDIODRIVER=dummy -- /workspace/engine/vendor/bin/phpunit --bootstrap vendor/autoload.php --testdox tests
   fi
-  live_announce
   say "$dir: headless smoke test (${JUMPHP_MAX_FRAMES:-600} frames$([ -n "$(gl_flags "$dir")" ] && echo ', OpenGL on Xvfb'))"
   # shellcheck disable=SC2046
   php_run "$dir" $(gl_flags "$dir") -e JUMPHP_SMOKE=1 -e "JUMPHP_MAX_FRAMES=${JUMPHP_MAX_FRAMES:-600}" \

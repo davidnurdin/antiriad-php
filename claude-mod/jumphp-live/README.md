@@ -10,11 +10,15 @@ next to the conversation that shows what Claude is doing to the game, as it happ
   its screen as it changes (`● live`): the engine rewrites `var/live/frame.png` every few frames (`JUMPHP_LIVE`), the
   pane swaps it in several times a second. A project made before JumPHP had `JUMPHP_LIVE` (October 2026) needs
   its `bin/jumphp` and `engine/` brought up to date for this; the rest works without.
+- **Game tests, played before your eyes**: a test that extends `JumPHP\Testing\GameTestCase` plays the game (hold
+  a key 60 frames, check the paddle reached the bottom). The pane lists them as they run (⏳, then ✔ / ✘), shows
+  the game live with the test's name, and after the run the last frame of any test you press.
 - **The screens**: the screenshot `bin/jumphp shot` / `siteshot` just wrote, and every picture Claude reads to
   look at the game, drawn in the pane (kitty, Ghostty, iTerm2; the path elsewhere).
 - **The playground**: the result of `run_tests` / `get_test_run` (PHPUnit in the playground's sandbox) and of
   `sync_project` when Claude uses the JumPHP playground's MCP server.
 - **Your hands on it**: `▶ Tests` (key `t`) and `📸 Shot` (`s`) run them now, in the pane, without Claude;
+  `🐢 Game speed` / `⏩ Fast` (`r`): the runs at the game's speed (to watch them, the default) or as fast as they go;
   `🛠 Ask Claude to fix` (`f`) after a failure; a field to tell Claude something (it reads it after its current
   step).
 
@@ -35,5 +39,5 @@ In your JumPHP project (the folder with `bin/jumphp`), start Claude Code and typ
 first time Claude runs `bin/jumphp test` or `shot`.
 
 How it follows Claude's commands: a Bash command of Claude's that runs `bin/jumphp test|shot|siteshot|webshot` is
-run as `{ export JUMPHP_LIVE=1; <command> } 2>&1 | tee <log>` with its exit status kept, and the pane follows
+run as `{ export JUMPHP_LIVE=1 [JUMPHP_REALTIME=1]; <command> } 2>&1 | tee <log>` with its exit status kept, and the pane follows
 that log. Other commands are not touched.

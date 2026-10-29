@@ -124,7 +124,7 @@ games/<id>/
 | `bin/jumphp install <id>` | composer install of the game |
 | `bin/jumphp composer <id> require vendor/pkg` | composer (pure-PHP packages only: no extension exists in the browser) |
 | `bin/jumphp run <id>` | plays on the desktop (window + sound). Needs a display; not usable by an agent without a screen. |
-| `bin/jumphp test <id>` | `php -l`, phpstan (level 5, if `phpstan.neon` and `bin/jumphp test engine` ran once), phpunit (`tests/` if any), **headless smoke test** (600 frames, any PHP warning = failure) |
+| `bin/jumphp test <id>` | `php -l`, phpstan (level 5, if `phpstan.neon` and `bin/jumphp test engine` ran once), phpunit (`tests/` if any, game tests included), **headless smoke test** (600 frames, any PHP warning = failure) |
 | `bin/jumphp shot <id> [frames] [out.png]` | **headless screenshot**: runs N frames (default 120) and saves a PNG in `games/<id>/var/screenshots/` — open it to SEE the game |
 | `bin/jumphp build <id>` | browser build → `games/<id>/dist/web/` (static files) |
 | `bin/jumphp build:remote <id>` | the game as a **remote game** (`dist/remote/`: shared engine + files one by one + manifest, what a games site serves, docs/remote.md); `JUMPHP_WEB=remote bin/jumphp serve/webshot <id>` tries it |
@@ -685,7 +685,8 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 
 ## 10. Definition of done (always)
 
-1. `bin/jumphp test <id>` passes (it runs your `smoke` scene 600 frames; make that a self-playing demo).
+1. `bin/jumphp test <id>` passes (it runs your `smoke` scene 600 frames; make that a self-playing demo), with game
+   tests (below) for the main mechanics.
 2. `bin/jumphp shot <id> 60` (title) and `JUMPHP_INPUT='[[5,"confirm"]]' bin/jumphp shot <id> 240 var/screenshots/play.png`
    (in game): **open the PNGs and check** that what you see is what you intended.
 3. Menus reachable, `pause` / `back` work, the game can be won / lost and restarted.
@@ -693,6 +694,41 @@ in PHP (delivered at the start of the next frame). `window.JumPHP.php('echo 1;')
 5. If the browser engine exists (`build/engine/php-web.wasm`): `bin/jumphp build <id>` then
    `bin/jumphp webshot <id> 6 '[[1,"Enter"]]'` passes and its screenshot looks right.
 6. Update `games/<id>/AGENTS.md` (what the game is, its scenes, its controls, anything non-obvious).
+
+### Game tests: tests that play the game
+
+Besides plain unit tests (`games/<id>/tests/*Test.php`, PHPUnit 11), write a few **game tests**: a test that plays
+the game, frame by frame, and checks what happened. Extend `JumPHP\Testing\GameTestCase`; `$this->game` drives it:
+
+```php
+<?php
+namespace Tests;
+
+use App\Entity\Paddle;
+use App\Scene\PlayScene;
+use JumPHP\Testing\GameTestCase;
+
+final class PaddleTest extends GameTestCase
+{
+    public function testThePaddleGoesFromTheTopToTheBottom(): void
+    {
+        $this->game->start(PlayScene::class, ['mode' => 'local']);   // the scene, no fade, one frame
+        $paddle = $this->game->peek('left');                        // a field of the scene, private or not
+        $this->game->hold('p1_up', 60);                             // an action held 60 frames (1 s), then let go
+        self::assertEqualsWithDelta(PlayScene::TOP, $paddle->getBoundingBox()['y'], 1);
+        $this->game->hold('p1_down', 90);
+        self::assertEqualsWithDelta(PlayScene::BOTTOM - Paddle::HEIGHT, $paddle->getBoundingBox()['y'], 1);
+    }
+}
+```
+
+`start($scene, $params)`, `press($action, $frames = 1)`, `hold($action, $frames)`, `run($frames)`, `wait($seconds)`,
+`scene()`, `peek($field, $object = null)`, `shot($name)` (a PNG of the frame). One game per PHP process: each test
+starts the scene it needs. Test what the player sees happen: a move, a jump that lands, a pickup that scores, an
+enemy that dies, a level that ends. Name tests as sentences (`testTheBallBouncesOnThePaddle`): they are shown as
+such. Watched live: `bin/jumphp test` with `JUMPHP_LIVE=1` (the Claude Code pane `jumphp-live` sets it) writes the
+frames as they run and each test's last frame (`var/live/tests/`); `JUMPHP_REALTIME=1` runs them at the game's speed.
+They need SDL: `bin/jumphp test` runs them; the playground's sandbox (MCP `run_tests`) skips them.
 
 ## 11. Troubleshooting
 

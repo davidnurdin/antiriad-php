@@ -72,3 +72,42 @@ test('other commands are left alone', async ($, on) => {
   await $.tool.call({ tool: 'Bash', command: 'git status' })
   expect(ran).toBe('git status')
 })
+
+const PLAYED = [
+  '==> live frames: /work/JumPHP/var/live/frame.png',
+  '==> games/pong: php -l',
+  '==> games/pong: phpunit',
+  '[jumphp-test] start Tests\\PaddleTest::testThePaddleGoesFromTheTopToTheBottom',
+  '[jumphp-test] frame Tests\\PaddleTest::testThePaddleGoesFromTheTopToTheBottom tests/Tests.PaddleTest-testThePaddleGoesFromTheTopToTheBottom.png',
+  '.[jumphp-test] start Tests\\PaddleTest::testTheBallIsServed',
+  '[jumphp-test] frame Tests\\PaddleTest::testTheBallIsServed tests/Tests.PaddleTest-testTheBallIsServed.png',
+  'Paddle (Tests\\Paddle)',
+  ' ✔ The paddle goes from the top to the bottom',
+  ' ✘ The ball is served',
+  'Tests: 2, Assertions: 3, Failures: 1.',
+].join('\n')
+
+test('the game tests are listed with their marks, a press shows a test\'s last frame', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'jumphp' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('process.spawn', async function* () {
+    return { value: { code: 0, signal: null } }
+  })
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('clock.now', () => ({ value: 1000 }))
+  on('clock.sleep', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
+  on('tool.call', () => ({ result: { stdout: PLAYED, stderr: '', interrupted: false }, isError: true }))
+
+  await $.tool.call({ tool: 'Bash', command: 'bin/jumphp test pong' })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect((await ui.find({ type: 'Button', key: 'gt-0' }))?.text).toBe('✔ The paddle goes from the top to the bottom')
+    expect((await ui.find({ type: 'Button', key: 'gt-1' }))?.text).toBe('✘ The ball is served')
+    await ui.press({ key: 'gt-0' })
+    expect((await ui.find({ type: 'Text', text: /^last frame of/ }))?.text).toBe('last frame of: The paddle goes from the top to the bottom')
+    await ui.press({ key: 'gt-0' })
+    await ui.unmount()
+  }
+})

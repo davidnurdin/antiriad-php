@@ -18,7 +18,7 @@ final class World
 
     private static ?self $instance = null;
 
-    /** @var array<int, array{exits: array<string, ?int>, palette: int, ground: list<string>, walls: list<string>, ceiling: list<string>, objects: list<list<int>>}> */
+    /** @var array<int, array{exits: array<string, ?int>, palette: int, ground: list<string>, walls: list<string>, ceiling: list<string>, top: string, objects: list<list<int>>}> */
     public array $rooms;
     /** @var list<array{x: int, y: int, w: int, h: int, colour: int}> */
     public array $sprites;

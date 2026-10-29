@@ -679,9 +679,7 @@ final class Game
         }
         $this->score += ($h->inSuit ? $a->points >> 1 : $a->points) * 10;   // #5BCE: what bites dies for points
         $this->sound('hurt');
-        if ($a->kind === Actor::ENEMY) {
-            $a->vanish();                         // #5BED: it fades away
-        }
+        $a->vanish();                             // #5BED: it fades away (an enemy, the big head's bomb...)
     }
 
     private function hitEnemy(Actor $e, int $damage): void

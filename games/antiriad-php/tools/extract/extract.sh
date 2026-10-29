@@ -41,7 +41,11 @@ ogg() {  # ogg <psg.bin> <from> <to> <out.ogg>: AY log -> mono Ogg
 
 echo "title music..."
 mkdir -p "$ASSETS/music" "$ASSETS/sfx"
-run title 6500
+run title 6500 -s 800
+# the title screen as it stands once drawn (credits over the dashboard): shown as is by TitleScene
+mkdir -p "$ASSETS/title"
+python3 -I -c 'import sys; from PIL import Image; Image.open(sys.argv[1]).convert("RGB").save(sys.argv[2])' \
+  "$WORK/title/screen-00800.ppm" "$ASSETS/title/title.png"
 # the tune starts at frame 665 and its order pointer (#7A5D) is back to its first entry at frame 6445
 ogg "$WORK/title/psg.bin" 665 6445 "$ASSETS/music/title.ogg"
 

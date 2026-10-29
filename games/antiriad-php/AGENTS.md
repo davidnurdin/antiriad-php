@@ -23,13 +23,13 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
 - **Assets** (`assets/`, ignored by git: the original's data) are rebuilt by `tools/extract/extract.sh`:
   `rooms/room-NN.png` (320 x 128 with the neighbours' edge columns), `sprites/sprites-PP.png` (one sheet per
   room palette), `hud/hud.png`, `data/world.json` (exits, ground and wall masks, objects, animations,
-  programs, types, items, messages, font), `music/*.ogg`, `sfx/*.ogg`. On the playground they are private files.
+  programs, types, items, messages, font), `title/title.png`, `music/*.ogg`, `sfx/*.ogg`. On the playground they are private files.
 - **Units**: the original's. x in screen bytes (0-79, 4 view pixels), y in lines (50 = top of the
   playfield, 178 = under it). View 320 x 200: playfield 0-127, dashboard 128-199.
-- **Scenes**: `TitleScene` (menu, title music, credits ticker) → `PlayScene` (the game; `GAME OVER` /
+- **Scenes**: `TitleScene` (the original's title screen, `assets/title/title.png`, credits rewritten translated except in Spanish; fire starts, Escape = options) → `PlayScene` (the game; `GAME OVER` /
   `VICTOIRE` then fire → title) ; overlay `PauseScene` ; `OptionsScene` (pushed: sounds, music, language).
 - **Model** (`src/Antiriad/`, created with `new`, excluded from the container): `World` (world.json),
-  `Game` (rules, 12 ticks a second), `Hero` (Tal / the suit: walk, jump, fall table, walls), `Actor` (objects
+  `Game` (rules, 15 ticks a second: the original's walking pace), `Hero` (Tal / the suit: walk, jump, fall table, walls), `Actor` (objects
   running the original's movement programs and animations), `Gfx`, `CpcFont` (the original font, also the
   engine's font), `Ticker` (message line), `Messages` (fr / en through config/lang.yaml, es = the disc's texts).
 - **Rules**: see the doc block of `Game`. Modules: 0 boots (room 43), 1 pulse beam (33), 2 mine (20),
@@ -37,4 +37,5 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
 - **Controls** (`config/input.yaml`): arrows, up / Z = jump (thrust in the suit), Space = throw / fire,
   down = crouch / pick up / enter the suit, E = in / out of the suit, Escape = pause.
 - **Test params** of `PlayScene`: `room`, `x`, `y`, `suit`, `energy`, `modules` (list), `lives`, `demo`.
+- **Sprites** face right in the sheets; bit 7 mirrors them (facing left).
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

@@ -15,7 +15,7 @@ final class Hero
     public const H = 42;
     private const JUMP_FROM = 11;       // fall table index a jump starts from: 8, 7, 6, 5, 4, 4, 3... = 46 lines
 
-    // sprites of the original (facing left; bit 7 = mirrored), animations #9021 1-#15
+    // sprites of the original (the sheet faces right; bit 7 = mirrored, facing left), animations #9021 1-#15
     private const WALK = [3, 4, 5, 6, 7, 0, 1, 2];
     private const THROW = [17, 17, 18, 18, 19, 19, 19, 17, 17, 8];
     private const IDLE = 9;
@@ -140,13 +140,13 @@ final class Hero
     public function animate(): void
     {
         $t = $this->poseTick++;
-        $mirror = $this->facing > 0 ? 0x80 : 0;
+        $mirror = $this->facing < 0 ? 0x80 : 0;
         if ($this->inSuit) {
             $this->frame = match (true) {
                 $this->flying || !$this->onGround => self::SUIT_FLY,
-                $this->pose === 'walk' => self::SUIT_WALK[intdiv($t, 2) % 2] | $mirror,
+                $this->pose === 'walk' => self::SUIT_WALK[intdiv($t, 2) % 2],
                 default => self::SUIT_IDLE,
-            };
+            } | $mirror;
             return;
         }
         $this->frame = match ($this->pose) {

@@ -13,7 +13,7 @@ use JumPHP\Scene\AbstractScene;
 
 /**
  * The game: the room on top (320 x 128), the dashboard under it (its own picture, mode 1 on the CPC).
- * The rules run at the original's pace, 12 ticks a second (App\Antiriad\Game); drawing runs every frame.
+ * The rules run at the original's pace, 15 ticks a second (App\Antiriad\Game); drawing runs every frame.
  *
  * Test params: room, x, y, suit (bool), energy, modules (list of 0-3), lives, demo (a bot plays).
  */
@@ -162,7 +162,7 @@ final class PlayScene extends AbstractScene
         }
         // the centre screen: the lives, or the mine's countdown; the round one: the cell Tal carries
         if ($g->countdown !== null) {
-            $font->draw($r, (string)max(0, intdiv($g->countdown, 12)), 163, 160, 2, self::RED, 'center');
+            $font->draw($r, (string)max(0, intdiv($g->countdown, 15)), 163, 160, 2, self::RED, 'center');
         } else {
             for ($i = 0; $i < min(5, $g->lives); $i++) {
                 $r->fillRect(146 + $i * 7, 164, 5, 8, self::RED);

@@ -4,7 +4,7 @@ namespace App\Antiriad;
 
 /**
  * One game: the rules of the original, run one tick at a time (the original updates its objects about
- * 12 times a second). The scene gives the controls of the tick and plays the sounds listed in $sounds.
+ * 15 times a second). The scene gives the controls of the tick and plays the sounds listed in $sounds.
  *
  *  - Tal on foot: walks, jumps, throws stones, crouches to pick something up. His life (#B4FB, 31) drops
  *    by the "bite" of what touches him (type byte 1, bits 4-0); an enemy that touches him dies of it.
@@ -17,14 +17,14 @@ namespace App\Antiriad;
  */
 final class Game
 {
-    public const TICK = 1 / 12;
+    public const TICK = 1 / 15;                // the main loop's pace: Tal walks a byte every 3.3 CPC frames
     public const MAX_LIFE = 31;
     public const MAX_ENERGY = 31;
     public const BOOTS = 0;
     public const PULSE = 1;
     public const MINE = 2;
     public const NEGATOR = 3;
-    private const PERIOD = 24;                  // #6F08: every 100 frames of the CPC, 2 seconds
+    private const PERIOD = 30;                  // #6F08: every 100 frames of the CPC, 2 seconds
     // module index -> its message (#5A2D...)
     private const MODULE_MESSAGE = [8, 9, 11, 10];
     // #8B37: rooms from which the radiation zone number drops by one (zone 6 = rooms 0-1 ... 0 = 41+)

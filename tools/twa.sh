@@ -33,9 +33,12 @@ if [ ! -x "$SDK/build-tools/$BUILD_TOOLS/apksigner" ] || [ ! -d "$SDK/platforms/
     unzip -q /tmp/tools.zip -d "$SDK/cmdline-tools" && mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest" && rm /tmp/tools.zip
   fi
   say "Android SDK: build-tools $BUILD_TOOLS, $PLATFORM (license accepted by you)"
-  yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses >/dev/null
+  # the new SDK CLI no longer needs --licenses; `yes` gets SIGPIPE under pipefail, so never fail on it
+  { yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses >/dev/null; } || true
   "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" "build-tools;$BUILD_TOOLS" "platforms;$PLATFORM" | grep -v '^\[=*' || true
 fi
+# bubblewrap looks for the SDK's bin/ (or tools/) folder, where the old layout had sdkmanager
+[ -e "$SDK/bin" ] || ln -s cmdline-tools/latest/bin "$SDK/bin"
 mkdir -p "$HOME/.bubblewrap"
 printf '{"jdkPath": "/opt/jdk", "androidSdkPath": "%s"}\n' "$SDK" > "$HOME/.bubblewrap/config.json"
 

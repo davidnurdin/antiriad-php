@@ -1,0 +1,49 @@
+{
+  "packageId": "io.github.davidnurdin.antiriad_php",
+  "host": "jumphp.net",
+  "name": "L'Armure Sacrée d'Antiriad",
+  "launcherName": "Armure Sacrée d'Antiriad",
+  "display": "fullscreen",
+  "themeColor": "#0B0E1F",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#000000",
+  "enableNotifications": false,
+  "startUrl": "/antiriad-php/jouer?app=1",
+  "iconUrl": "https://jumphp.net/media/icons/antiriad-php-3709cbb4ea3a-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/keys/io.github.davidnurdin.antiriad_php.keystore",
+    "alias": "upload"
+  },
+  "appVersionName": "3",
+  "appVersionCode": 3,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://jumphp.net/antiriad-php/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://jumphp.net/antiriad-php",
+  "minSdkVersion": 24,
+  "orientation": "landscape",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [
+    "fullscreen",
+    "standalone"
+  ],
+  "appVersion": "3"
+}

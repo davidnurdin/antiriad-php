@@ -35,6 +35,7 @@ const { TwaManifest } = require('@bubblewrap/core');
 		twa.enableNotifications = false;
 	}
 	twa.packageId = packageId;
+	twa.minSdkVersion = 24; // the Trusted Web Activity library (androidbrowserhelper 2.7) needs Android 7
 	twa.signingKey = { path: keystore, alias: 'upload' };
 	twa.generatorApp = 'jumphp';
 	if (launcherName) twa.launcherName = launcherName;

@@ -40,6 +40,8 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   faces standing: forward; up walking only stops him), landing. The ceiling stops
   a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in: he dissolves in front of it
   (#5D9E / #6E30: 12 masks of #8E22, `sprites/dissolve-PP.png`), then the suit lights up.
+- **Teleporters** (#29, a room's first object, #7192 / #6235): the objects after it wait 40 ticks, then
+  come in its place; shot down before, it brings none. It hums (#0D, a loop) while it is there.
 - **Kept bugs**: throwing again and again with the way held against a wall moves Tal a byte each
   throw, no wall test (`Hero::control`): he goes through walls, as in the original.
 - **Death** (#5816): 32 ticks (107 frames), a jump or fall goes on, the room keeps moving; then #15.
@@ -56,6 +58,6 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
 - **Sprites** face left in the sheets; bit 7 mirrors them (facing right). #73F0 mirrors sprite bytes in place (state in #93B2): export.py turns them back.
 - **Sounds** where the original plays them (`tools/extract/extract.sh`): steps on walk frames 0 and 4
   and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room (its hum loops while Tal is there), a saucer's whoosh
-  (when an animation reaches sprite #6E). Played alone through #752A some lose their envelope: hurt, saucer
-  and leave are cut from real games instead. The cave radiation sound (#6F66) is not extracted yet.
+  (when an animation reaches sprite #6E). Each is played through #752A from room 61 with the game
+  started as a player would (else envelopes are lost) and rendered from its own channels only.
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

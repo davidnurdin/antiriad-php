@@ -65,6 +65,12 @@ final class Game
     private ?Actor $missile = null;
     /** ticks left of Tal getting into the suit (#5D9E: 12, Tal and the suit flickering), -1: no */
     public const ENTER_TICKS = 21;
+    /** #6235: main loop turns before a teleporter brings the room's other objects */
+    private const TELEPORT_TICKS = 40;
+    private ?Actor $teleporter = null;
+    /** @var list<list<int>> the objects a teleporter brings: x, y, program, type */
+    private array $pending = [];
+    private int $teleportIn = 0;
     /** a teleporter's room: its hum loops */
     public bool $hum = false;
     /** ticks left of Tal's fading into the suit, -1 = not getting in */
@@ -125,8 +131,21 @@ final class Game
     {
         $this->room = $room;
         $this->actors = [];
-        foreach ($this->world->rooms[$room]['objects'] as [$x, $y, $program, $type]) {
-            $this->actors[] = new Actor($this->world, $type, $x, $y, $program);
+        $this->pending = [];
+        $this->teleporter = null;
+        // #7192: the objects up to a teleporter (#29, always the first); those after it wait (#B54F = 40)
+        foreach ($this->world->rooms[$room]['objects'] as $o) {
+            if ($this->teleporter !== null) {
+                $this->pending[] = $o;
+                continue;
+            }
+            [$x, $y, $program, $type] = $o;
+            $a = new Actor($this->world, $type, $x, $y, $program);
+            $this->actors[] = $a;
+            if ($type === 0x29) {
+                $this->teleporter = $a;
+                $this->teleportIn = self::TELEPORT_TICKS;
+            }
         }
         $this->leader = $this->actors[0] ?? null;
         $this->missile = null;
@@ -147,13 +166,7 @@ final class Game
         if (!$this->hero->inSuit && $this->suit[0] === $room) {
             $this->actors[] = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
         }
-        $this->hum = false;
-        foreach ($this->actors as $a) {
-            if ($a->type === 0x29) {             // #7182: a teleporter's room hums (#0D) while Tal is in it
-                $this->hum = true;
-                break;
-            }
-        }
+        $this->hum = $this->teleporter !== null;  // #7184: a teleporter hums (#0D) as long as it is there
         if ($room <= 1) {                       // #7113: the base is irradiated
             if ($this->modules[self::NEGATOR]) {
                 $this->say(21);
@@ -197,6 +210,38 @@ final class Game
             $zone--;
         }
         return $zone;
+    }
+
+    /**
+     * #6235: 40 turns after Tal came in, a teleporter still there gives way to the room's other objects
+     * (#7192 from the next one, into its slot); shot down before, it brings none.
+     */
+    private function teleporterTick(): void
+    {
+        $t = $this->teleporter;
+        if ($t === null) {
+            return;
+        }
+        if ($t->dead) {
+            $this->teleporter = null;
+            $this->pending = [];
+            $this->hum = false;
+            return;
+        }
+        if (--$this->teleportIn > 0) {
+            return;
+        }
+        $t->dead = true;
+        $this->teleporter = null;
+        $this->hum = false;
+        $first = null;
+        foreach ($this->pending as [$x, $y, $program, $type]) {
+            $a = new Actor($this->world, $type, $x, $y, $program);
+            $first ??= $a;
+            $this->actors[] = $a;
+        }
+        $this->pending = [];
+        $this->leader = $first;
     }
 
     // ---------------------------------------------------------------- the tick
@@ -246,6 +291,7 @@ final class Game
             $h->inSuit ? $this->suitTick($in) : $this->footTick($in);
             $this->roomEdges();
         }
+        $this->teleporterTick();
         $saucer = false;
         foreach ($this->actors as $a) {
             $was = $a->frame & 0x7F;
@@ -441,7 +487,8 @@ final class Game
         }
         $zone = self::zone($this->room);
         if ($zone >= 2 && $zone <= 4 && !$this->demo) {
-            $this->life = max(0, $this->life - intdiv($zone, 2));    // #6F66 sounds #19 + zone: not extracted yet
+            $this->life = max(0, $this->life - intdiv($zone, 2));
+            $this->sound('rad' . $zone);                          // #6F66: the sound #19 + zone
         }
     }
 

@@ -15,7 +15,7 @@ final class Assets
     private static ?CpcFont $font = null;
 
     private const SFX = ['shoot', 'pickup', 'hurt', 'hit', 'step', 'beam', 'suit', 'message',
-        'enter', 'leave', 'activate', 'teleport', 'saucer'];
+        'enter', 'leave', 'activate', 'teleport', 'saucer', 'rad2', 'rad3', 'rad4'];
 
     public static function boot(Engine $engine): World
     {

@@ -222,7 +222,8 @@ Replace its scenes and entities with your game:
    `BitmapFont`, and `Synth` sounds.
 6. Replace the skeleton leftovers: `description` in game.yaml, `README.md`, `AGENTS.md`, unused `lang.yaml`
    entries, `src/Entity/Coin.php`...
-7. `bin/jumphp test <id>` + `bin/jumphp shot <id>`; iterate.
+7. **Game tests as you go** (§10 "Game tests"): each mechanic you write gets a test that plays it, run at once
+   with `bin/jumphp test <id>` (the user watches them play); `bin/jumphp shot <id>`; iterate.
 8. Browser: `bin/jumphp engine:build` (once per machine), `bin/jumphp build <id>`, `bin/jumphp webshot <id>`.
 
 ---
@@ -728,7 +729,10 @@ starts the scene it needs. Test what the player sees happen: a move, a jump that
 enemy that dies, a level that ends. Name tests as sentences (`testTheBallBouncesOnThePaddle`): they are shown as
 such. Watched live: `bin/jumphp test` with `JUMPHP_LIVE=1` (the Claude Code pane `jumphp-live` sets it) writes the
 frames as they run and each test's last frame (`var/live/tests/`); `JUMPHP_REALTIME=1` runs them at the game's speed.
-They need SDL: `bin/jumphp test` runs them; the playground's sandbox (MCP `run_tests`) skips them.
+They need SDL: `bin/jumphp test` runs them, and so does the playground's sandbox (MCP `run_tests`, without a
+window): there each game test is **filmed** (`JUMPHP_FILM`: a frame every 4) and the owner replays it in the
+studio, test by test. Write them **while you develop**, not at the end: a mechanic is done when its game test
+passes and its frames show it.
 
 ## 11. Troubleshooting
 
@@ -823,7 +827,8 @@ The user signs in with GitHub on the playground, makes an MCP token (`/studio/mc
 Claude Code (the page shows the command, `claude mcp add --transport http --scope user jumphp https://<playground>/mcp
 --header "Authorization: Bearer jph_..."`). Its tools: `whoami`, `list_categories`, `list_projects`,
 `create_project`, `get_project`, `update_project`, `sync_project`, `import_project`, `list_private_files`,
-`upload_private_files`, `remove_private_files`, `list_games`, `list_game_files`, `read_game_file`. The server's
+`upload_private_files`, `remove_private_files`, `list_games`, `list_game_files`, `read_game_file`, `run_tests`,
+`get_test_run` (the game's PHPUnit tests, game tests filmed), notes and todos, feedback. The server's
 instructions say the same as this section.
 
 To make a game for the user on the playground:
@@ -832,13 +837,15 @@ To make a game for the user on the playground:
    from its `.dsk`: made with dsk2jumphp, §12; ask the user for the path of their disc), `port` (a port of a game
    whose source code exists). It made the repository from this version of JumPHP with the skeleton game and
    `BRIEF.md`.
-2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only.
+2. `git clone` it (`clone_url`), make the game as this file says (§4-§10), in `games/<id>/` only, with a game
+   test for each mechanic as you write it (§10).
 3. Its home page `games/<id>/site/` (§13) and `games/<id>/assets/thumbnail.png` (the directory's picture,
    16:9; else the site's `og:image`, else `assets/icon.png`).
 4. Check it like the playground runs it: `bin/jumphp build:remote <id>` then
    `JUMPHP_WEB=remote bin/jumphp webshot <id> 6 '[[1,"Enter"]]'`.
 5. Commit, `git push`, `sync_project`: it publishes at once and returns errors / warnings. Fix and push until
-   the status is `ready`. Then `update_project listed=true` and give the user the game's URL.
+   the status is `ready`. `run_tests` then `get_test_run`: the tests pass there too (the user replays the
+   filmed game tests in the studio). Then `update_project listed=true` and give the user the game's URL.
 
 What the playground publishes and how:
 - only `games/<id>/` (the `vendor/` of the game is not used: the engine and its packages come from the shared

@@ -18,14 +18,19 @@ use JumPHP\Scene\Scene;
  *
  * Watched: with JUMPHP_LIVE (bin/jumphp test, the Claude Code pane jumphp-live) every few frames go to the live
  * picture, and each test's last frame to var/live/tests/; with JUMPHP_REALTIME the frames run at the game's
- * speed, so that one sees the paddle move. The game boots once per PHP process; each test starts its scene.
+ * speed, so that one sees the paddle move. With JUMPHP_FILM=dir each test is filmed (the playground replays it):
+ * dir/<n>/name.txt (the test), dir/<n>/<frame>.png every JUMPHP_FILM_EVERY frames (default 4), FILM_MAX at most.
+ * The game boots once per PHP process; each test starts its scene.
  */
 final class Game
 {
+    public const FILM_MAX = 150;
+
     private static ?self $instance = null;
 
     private string $test = '';
     private int $shots = 0;
+    private int $filmed = 0;
 
     private function __construct(public readonly Application $app, public readonly Engine $engine, private string $root)
     {
@@ -70,6 +75,7 @@ final class Game
             if ($live !== null && $this->engine->frameCount() % $every === 0) {
                 $this->save($live);
             }
+            $this->film();
             if ($realtime) {
                 usleep(max(0, (int)((1 / 60 - (microtime(true) - $started)) * 1e6)));
             }
@@ -126,6 +132,11 @@ final class Game
     {
         $this->test = $test;
         $this->shots++;
+        $this->filmed = 0;
+        if (($dir = $this->filmDir()) !== null) {
+            @mkdir($dir, 0777, true);
+            @file_put_contents("$dir/name.txt", $test);
+        }
         Application::stderr("[jumphp-test] start $test\n");
     }
 
@@ -135,11 +146,29 @@ final class Game
         if ($this->test === '') {
             return;
         }
+        $this->film(true);
         $file = $this->shot(str_replace('\\', '.', $this->test));
         $live = self::live();
         $shown = $live !== null ? substr($file, strlen(dirname($live)) + 1) : $file;
         Application::stderr("[jumphp-test] frame {$this->test} $shown\n");
         $this->test = '';
+    }
+
+    /** the test's film: a frame every JUMPHP_FILM_EVERY frames, and its last one */
+    private function film(bool $isLast = false): void
+    {
+        $dir = $this->filmDir();
+        $every = max(1, (int)(getenv('JUMPHP_FILM_EVERY') ?: 4));
+        if ($dir === null || $this->filmed >= self::FILM_MAX || (!$isLast && $this->engine->frameCount() % $every !== 0)) {
+            return;
+        }
+        $this->engine->sdl->saveScreenshot(sprintf('%s/%04d.png', $dir, ++$this->filmed));
+    }
+
+    private function filmDir(): ?string
+    {
+        $film = getenv('JUMPHP_FILM');
+        return $film === false || $film === '' || $this->test === '' ? null : sprintf('%s/%03d', rtrim($film, '/'), $this->shots);
     }
 
     private static function live(): ?string

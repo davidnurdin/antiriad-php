@@ -12,6 +12,7 @@ game:
   pause_scene: App\Scene\PauseScene
   lang: fr
   online: false
+  pwa: true                     # installable + offline: the Android app (bin/jumphp twa) is a Trusted Web Activity on it
   # phones: a floating stick (up = jump / fly), A = throw / fire (Space), B = in / out of the suit (E), START = pause
   touch: { pad: stick, a: Space, b: E, start: Escape, labels: { a: FEU, b: ARMURE } }
   controls: "Flèches : marcher, haut = sauter / voler · Espace : lancer / tirer · Bas : s'accroupir, ramasser, entrer dans l'armure · E : entrer / sortir de l'armure · Échap : pause"

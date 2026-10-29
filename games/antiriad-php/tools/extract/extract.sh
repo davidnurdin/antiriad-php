@@ -79,8 +79,7 @@ sound hit 3 "2:1e"             # #5D44: an enemy is hit
 sound hurt 48 "2:13"           # #5BE1: an enemy touches Tal (or the suit), #5D4F: an enemy dies
 sound step 3 "1:15"            # #555B: a footstep (walk frames 0 and 4) / #6642: landing
 sound beam 24 "1:16"           # #5C06: a separating line is crossed (again every 5 frames while on it)
-sound suit 100 "2:04" lead     # #6147: the suit comes to life (it starts 48 frames after the call)
-sound message 25 "0:07"        # #5EF7: a message starts
+sound message 24 "0:07" loop   # #5EF7: a message starts; a 3-frame warble looping until the line is empty
 sound saucer 84 "1:0a"         # #5547: while slot 3 shows sprite #6E (a saucer's animation #3B)
 sound rad2 24 "1:1b"           # #6F66: every 2 s in a cave zone (#B538 = 2-4), the sound #19 + zone
 sound rad3 24 "1:1c"
@@ -94,6 +93,9 @@ sound victory 1150 "0:17 1:18 2:19"    # #5C3E: the base is destroyed
 run leave 1480 -k '780:joy_fire+,820:joy_fire-,1400:joy_left+,1420:joy_left-' -F 700:5572=00 \
   -F 700:58e0=3f -F 700:58eb=3f -F 840:b403=17 -F 840:b404=40
 ogg "$WORK/leave/psg.bin" 1403 1476 "$ASSETS/sfx/leave.ogg"
+# #6147: the same run, the suit's tune once Tal is in (sound #04 on channel C, frames 927-1182 up to its end
+# call #57): played through the stub it starts late and is cut
+ogg "$WORK/leave/psg.bin" 927 1182 "$ASSETS/sfx/suit.ogg" "" C
 # #7184: a teleporter's room hums as long as Tal is in it (sound #0D on channel C, a 21-frame cycle):
 # 4 cycles from room 61, played in a loop
 run teleport 900 -k '780:joy_fire+,820:joy_fire-' -F 700:5572=00 -F 700:58e0=3d -F 700:58eb=3d

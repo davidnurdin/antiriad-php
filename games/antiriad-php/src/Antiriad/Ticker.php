@@ -11,7 +11,7 @@ use JumPHP\Renderer\TextDrawer;
  */
 final class Ticker
 {
-    private const SPEED = 72.0;         // view pixels per second
+    private const SPEED = 4 / Game::TICK;   // #5EA0: a byte (4 view pixels) each turn of the main loop
 
     /** @var list<string> */
     private array $queue = [];

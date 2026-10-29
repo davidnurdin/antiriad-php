@@ -29,6 +29,8 @@ final class PlayScene extends AbstractScene
     private Game $game;
     private Ticker $ticker;
     private bool $humming = false;
+    /** #5EF7: the message warble (#07) loops from a message's start until the line is empty */
+    private bool $chatting = false;
     private float $acc = 0.0;
     private float $endTime = 0.0;
     private bool $demo = false;
@@ -50,12 +52,16 @@ final class PlayScene extends AbstractScene
         $this->makeScanner();
         $this->humming = false;
         $this->sound()->stopSfx('teleport');
+        $this->chatting = false;
+        $this->sound()->stopSfx('message');
     }
 
     public function exit(): void
     {
         $this->sound()->stopSfx('teleport');
         $this->humming = false;
+        $this->sound()->stopSfx('message');       // both start again with the next update()
+        $this->chatting = false;
     }
 
     public function pause(): void
@@ -133,8 +139,14 @@ final class PlayScene extends AbstractScene
         if ($this->acc > Game::TICK) {
             $this->acc = 0.0;
         }
-        if ($this->ticker->update($dt, $this->font())) {
-            $this->sound()->playSfx('message');
+        $started = $this->ticker->update($dt, $this->font());
+        $busy = $this->ticker->busy();
+        if ($started || $busy !== $this->chatting) {
+            $this->sound()->stopSfx('message');
+            if ($busy) {
+                $this->sound()->playSfx('message', -1);
+            }
+            $this->chatting = $busy;
         }
     }
 

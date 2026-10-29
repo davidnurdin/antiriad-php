@@ -66,7 +66,7 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
 - **Test params** of `PlayScene`: `room`, `x`, `y`, `suit`, `energy`, `modules` (list), `lives`, `demo`.
 - **Sprites** face left in the sheets; bit 7 mirrors them (facing right). #73F0 mirrors sprite bytes in place (state in #93B2): export.py turns them back.
 - **Sounds** where the original plays them (`tools/extract/extract.sh`): steps on walk frames 0 and 4
-  and landings, enemy hit / killed, suit in / out, the suit's start, a teleporter's room (its hum loops while Tal is there), a saucer's whoosh
+  and landings, enemy hit / killed, suit in / out, the suit's tune (5 s, cut from a real game), a teleporter's room (its hum loops while Tal is there), a saucer's whoosh
   (when an animation reaches sprite #6E). Each is played through #752A from room 61 with the game
   started as a player would (else envelopes are lost) and rendered from its own channels only.
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).

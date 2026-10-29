@@ -19,6 +19,15 @@ pour jouer sur le bureau). Jamais de PHP, d'emscripten ou de node à installer.
 
 ### Nouveau projet
 
+En une ligne (Linux, macOS, WSL ; sous Windows dans PowerShell : `irm https://jumphp.net/install.ps1 | iex`) :
+la commande `jumphp` ([install.sh](install.sh)), puis le projet.
+
+```bash
+curl -fsSL https://jumphp.net/install.sh | sh -s -- mon-jeu
+```
+
+Ou avec Composer :
+
 ```bash
 composer create-project jumphp/jumphp mon-jeu
 ```
@@ -205,6 +214,15 @@ Pixel-precise tiles and collisions (slopes, platforms, Tiled maps), entities and
 the desktop). Never install PHP, emscripten or node.
 
 ### New project
+
+In one line (Linux, macOS, WSL; on Windows in PowerShell: `irm https://jumphp.net/install.ps1 | iex`): the
+`jumphp` command ([install.sh](install.sh)), then the project.
+
+```bash
+curl -fsSL https://jumphp.net/install.sh | sh -s -- my-game
+```
+
+Or with Composer:
 
 ```bash
 composer create-project jumphp/jumphp my-game

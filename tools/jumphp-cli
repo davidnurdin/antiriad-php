@@ -11,6 +11,7 @@ set -euo pipefail
 CLI_VERSION=1
 PACKAGE=jumphp/jumphp
 PACKAGIST="https://repo.packagist.org/p2/$PACKAGE.json"
+REPO="${JUMPHP_REPO:-https://github.com/davidnurdin/jumPhp.git}"
 COMPOSER_IMAGE="${JUMPHP_COMPOSER_IMAGE:-composer:2.10.2}"
 STATE="${XDG_CACHE_HOME:-$HOME/.cache}/jumphp"
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -78,8 +79,15 @@ cmd_new() {
   [ -e "$dir" ] && die "$dir already exists"
   if command -v composer >/dev/null 2>&1; then
     composer create-project "$PACKAGE" "$dir"
+  elif ! command -v docker >/dev/null 2>&1; then
+    # a new computer: the newest release with git; the wizard then offers to install Docker
+    command -v git >/dev/null 2>&1 || die "git is needed (or composer, or docker): install it, then jumphp new $dir"
+    local tag; tag="$(latest)"
+    say "git clone JumPHP ${tag:+v$tag }into $dir"
+    git -c advice.detachedHead=false clone -q ${tag:+--branch "v$tag"} "$REPO" "$dir" && git -C "$dir" remote rename origin jumphp
+    git -C "$dir" checkout -q -B main
+    (cd "$dir" && bash tools/post-create.sh)
   else
-    command -v docker >/dev/null 2>&1 || die "composer or docker is needed"
     say "composer create-project $PACKAGE $dir (in Docker: $COMPOSER_IMAGE)"
     docker run --rm $([ -t 0 ] && echo -it) --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app \
       -e HOME=/tmp -e COMPOSER_HOME=/tmp/composer "$COMPOSER_IMAGE" create-project --no-scripts "$PACKAGE" "$dir"

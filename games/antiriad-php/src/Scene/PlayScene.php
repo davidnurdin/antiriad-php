@@ -40,7 +40,7 @@ final class PlayScene extends AbstractScene
         $this->gfx = Assets::gfx();
         $this->demo = !empty($params['demo']);
         $this->game = new Game($this->world, $params);
-        $this->ticker = new Ticker(136, 216, 184);      // #5EA0: the dashboard's message window (columns 17-26, row 23)
+        $this->ticker = new Ticker(120, 208, 184);      // #5EA0: the dashboard's message window (black from x 119 to 208, row 23)
         $this->acc = 0.0;
         $this->endTime = 0.0;
         $this->latch = [];

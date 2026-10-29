@@ -5,6 +5,7 @@ namespace JumPHP\Kernel;
 use JumPHP\Audio\SoundManager;
 use JumPHP\Bridge\JsBridge;
 use JumPHP\Debug\FpsCounter;
+use JumPHP\Debug\LiveFrame;
 use JumPHP\Entity\EntityManager;
 use JumPHP\Input\ActionMap;
 use JumPHP\Input\Gamepad;
@@ -186,10 +187,7 @@ final class Application
         $max = (int)Platform::setting('JUMPHP_MAX_FRAMES', $shot !== null ? 120 : 600);
         $live = Platform::setting('JUMPHP_LIVE');
         if ($live !== null && $frame % max(1, (int)Platform::setting('JUMPHP_LIVE_EVERY', 10)) === 0) {
-            $tmp = preg_replace('/\.png$/', '', (string)$live) . '.tmp.png';
-            if ($this->engine->sdl->saveScreenshot($tmp)) {
-                @rename($tmp, (string)$live);
-            }
+            LiveFrame::write($this->engine->sdl, (string)$live);
         }
         if ($shot !== null && $every > 0 && $frame % $every === 0) {
             $this->engine->sdl->saveScreenshot(preg_replace('/\.png$/', '', (string)$shot) . sprintf('-%05d.png', $frame));

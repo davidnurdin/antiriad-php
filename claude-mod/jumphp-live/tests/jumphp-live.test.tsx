@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { cellsOf, fromBase64, toBase64 } from '../hooks/register'
 
 const PANE = {
   plugin: 'jumphp-live',
@@ -110,4 +111,15 @@ test('the game tests are listed with their marks, a press shows a test\'s last f
     await ui.press({ key: 'gt-0' })
     await ui.unmount()
   }
+})
+
+test('a picture drawn as half blocks: the top pixel in front, the bottom one behind', async () => {
+  // 2×2: red, green over blue, white
+  const rgb = new Uint8Array([74, 82, 71, 66, 2, 0, 2, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255])
+  expect(fromBase64(toBase64(rgb))).toEqual(rgb)
+  const drawn = cellsOf(rgb, 2)
+  expect(drawn?.rows).toBe(1)
+  const words = new Uint32Array(fromBase64(drawn!.cells).buffer)
+  expect(Array.from(words)).toEqual([0x2580, 0xff0000, 0x0000ff, 0x2580, 0x00ff00, 0xffffff])
+  expect(cellsOf(new Uint8Array([1, 2, 3]), 2)).toBe(null)
 })

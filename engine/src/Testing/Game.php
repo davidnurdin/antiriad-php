@@ -2,6 +2,7 @@
 
 namespace JumPHP\Testing;
 
+use JumPHP\Debug\LiveFrame;
 use JumPHP\Kernel\Application;
 use JumPHP\Kernel\Engine;
 use JumPHP\Scene\Scene;
@@ -147,13 +148,9 @@ final class Game
         return $live === false || $live === '' ? null : $live;
     }
 
-    /** written then renamed: a viewer reads whole pictures only */
+    /** the PNG and its small raw copy for any terminal (LiveFrame) */
     private function save(string $file): void
     {
-        @mkdir(dirname($file), 0777, true);
-        $tmp = preg_replace('/\.png$/', '', $file) . '.tmp.png';
-        if ($this->engine->sdl->saveScreenshot($tmp)) {
-            @rename($tmp, $file);
-        }
+        LiveFrame::write($this->engine->sdl, $file);
     }
 }

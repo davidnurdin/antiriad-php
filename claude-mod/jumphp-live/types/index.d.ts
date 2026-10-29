@@ -24,8 +24,11 @@ export type Check = {
   at: number
 }
 
-/** What the pane shows: the test whose last frame is drawn, whether the runs go at the game's speed. */
-export type View = { selected: string; isRealtime: boolean }
+/**
+ * What the pane shows: the test whose last frame is drawn, whether the runs go at the game's speed, how pictures
+ * are drawn (`blocks`: coloured half blocks, any terminal; `image`: the PNG, kitty / Ghostty / iTerm2).
+ */
+export type View = { selected: string; isRealtime: boolean; pixels: 'blocks' | 'image' }
 
 /** A picture of the game: from `bin/jumphp shot` / `siteshot`, or one Claude read. */
 export type Shot = { path: string; at: number; n: number }

@@ -5,6 +5,8 @@
 //    the pictures `bin/jumphp shot` / `siteshot` write and those Claude reads (Read of a .png).
 //  - The playground (MCP jumphp): its PHPUnit runs, its publications.
 //  - The game tests (JumPHP\Testing\GameTestCase: a test plays the game): each one as it runs, its last frame.
+//  - Pictures drawn as coloured half blocks in any terminal (the engine's small .rgb beside each PNG), or as images
+//    in kitty / Ghostty / iTerm2; 🖼 opens the picture on the desktop.
 //  - Buttons: run the tests or take a screenshot now (here, live), at the game's speed or fast, ask Claude to fix;
 //    a field to tell Claude.
 import { atom, read, update } from 'claude-code'
@@ -20,7 +22,7 @@ const check = atom({ plugin: 'jumphp-live', key: 'check' } as const, null as Che
 const shots = atom({ plugin: 'jumphp-live', key: 'shots' } as const, [] as Shot[], { shape: 'shots-1' })
 const remote = atom({ plugin: 'jumphp-live', key: 'remote' } as const, null as Remote | null, { shape: 'remote-1' })
 const where = atom({ plugin: 'jumphp-live', key: 'where' } as const, { root: '', game: '' } as Where, { shape: 'where-1' })
-const view = atom({ plugin: 'jumphp-live', key: 'view' } as const, { selected: '', isRealtime: true } as View, { shape: 'view-1' })
+const view = atom({ plugin: 'jumphp-live', key: 'view' } as const, { selected: '', isRealtime: true, pixels: 'blocks' } as View, { shape: 'view-2' })
 
 /** a bin/jumphp command that checks or pictures a game: its kind and game */
 const JUMPHP = /(?:^|[\s;&|(])(?:\.\/)?bin\/jumphp\s+(test|shot|siteshot|webshot)\b[ \t]*([\w.-]*)/
@@ -85,6 +87,66 @@ export function testsOf(log: string, live: string): GameTest[] {
   return [...tests.values()].map(t => ({ ...t, status: marks.get(t.label.toLowerCase()) ?? t.status }))
 }
 
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+export function fromBase64(text: string): Uint8Array {
+  const clean = text.replace(/[^A-Za-z0-9+/]/g, '')
+  const bytes = new Uint8Array(Math.floor(clean.length * 3 / 4))
+  let bits = 0
+  let value = 0
+  let at = 0
+  for (const char of clean) {
+    value = (value << 6) | B64.indexOf(char)
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      bytes[at++] = (value >> bits) & 0xff
+    }
+  }
+  return bytes.subarray(0, at)
+}
+
+export function toBase64(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = ((bytes[i] ?? 0) << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0)
+    out += B64[(n >> 18) & 63]! + B64[(n >> 12) & 63]!
+      + (i + 1 < bytes.length ? B64[(n >> 6) & 63]! : '=') + (i + 2 < bytes.length ? B64[n & 63]! : '=')
+  }
+  return out
+}
+
+/**
+ * A picture as Raster cells: the engine's raw copy (`.rgb`: "JRGB", width, height as u16 LE, RGB bytes) drawn as
+ * upper half blocks, the top pixel the foreground and the bottom one the background: two pixels a cell.
+ */
+export function cellsOf(rgb: Uint8Array, columns: number): { cells: string; rows: number } | null {
+  if (rgb.length < 8 || String.fromCharCode(rgb[0]!, rgb[1]!, rgb[2]!, rgb[3]!) !== 'JRGB') {
+    return null
+  }
+  const width = rgb[4]! | (rgb[5]! << 8)
+  const height = rgb[6]! | (rgb[7]! << 8)
+  if (width < 1 || height < 1 || rgb.length < 8 + width * height * 3) {
+    return null
+  }
+  const rows = Math.max(1, Math.round(columns * height / width / 2))
+  const pixel = (x: number, y: number): number => {
+    const at = 8 + (Math.min(height - 1, y) * width + Math.min(width - 1, x)) * 3
+    return (rgb[at]! << 16) | (rgb[at + 1]! << 8) | rgb[at + 2]!
+  }
+  const words = new Uint32Array(columns * rows * 3)
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      const x = Math.floor(column * width / columns)
+      const at = (row * columns + column) * 3
+      words[at] = 0x2580
+      words[at + 1] = pixel(x, Math.floor(row * 2 * height / (rows * 2)))
+      words[at + 2] = pixel(x, Math.floor((row * 2 + 1) * height / (rows * 2)))
+    }
+  }
+  return { cells: toBase64(new Uint8Array(words.buffer)), rows }
+}
+
 /** absolute paths of pictures in an output (bin/jumphp shot prints the file it wrote) */
 export function picturesIn(log: string): string[] {
   return [...new Set([...log.matchAll(/(\/[^\s'"]+\.(?:png|jpe?g|webp))\b/gi)].map(m => m[1] ?? ''))]
@@ -95,6 +157,30 @@ let seen = 0
 let liveBox = { columns: 0, rows: 0 }
 let liveGeneration = 0
 let isWatching = false
+
+/** a picture's blocks (its .rgb beside the PNG, written by JumPHP), or null when it has none */
+async function blocksOf($: Engine, png: string, columns: number): Promise<{ cells: string; rows: number } | null> {
+  try {
+    const bytes = await $.fs.read(png.replace(/\.png$/i, '.rgb'), { as: 'bytes' })
+    return cellsOf(fromBase64(bytes.base64), columns)
+  } catch {
+    return null
+  }
+}
+
+/** a picture opened on the desktop (the system's viewer) */
+async function openOnDesktop($: Engine, file: string): Promise<void> {
+  for (const opener of ['xdg-open', 'open']) {
+    try {
+      await $.process.run([opener, file], { timeoutMs: 5000 })
+      $.ui.toast(`Opened ${file}`)
+      return
+    } catch {
+      // the next one
+    }
+  }
+  $.ui.toast(`No viewer to open ${file}`)
+}
 
 async function begin($: Engine, kind: string, game: string, by: Check['by']): Promise<void> {
   const at = await $.clock.now()
@@ -130,7 +216,14 @@ async function watchLive($: Engine): Promise<void> {
       }
       if (c.live !== '' && liveBox.columns > 0) {
         liveGeneration += 1
-        await $.ui.blit({ requestId: PANE, key: 'live', source: { file: c.live, format: 'png', generation: liveGeneration }, ...liveBox }).catch(() => undefined)
+        if ((await read($, view)).pixels === 'image') {
+          await $.ui.blit({ requestId: PANE, key: 'live', source: { file: c.live, format: 'png', generation: liveGeneration }, ...liveBox }).catch(() => undefined)
+        } else {
+          const blocks = await blocksOf($, c.live, liveBox.columns)
+          if (blocks && blocks.rows === liveBox.rows) {
+            await $.ui.blit({ requestId: PANE, key: 'live', cells: blocks.cells, ...liveBox }).catch(() => undefined)
+          }
+        }
       }
       await $.clock.sleep(LIVE_MS)
     }
@@ -222,6 +315,10 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'jumphp', description: 'Open the JumPHP pane (tests, screenshots); /jumphp <game> to choose the game', argumentHint: '[game]' })
     await update($, where, w => ({ ...w, root: w.root || e.cwd }))
+    // pictures as images where the terminal draws them (kitty, Ghostty, iTerm2), else as coloured blocks
+    const term = `${(await $.env.get('TERM')) ?? ''} ${(await $.env.get('TERM_PROGRAM')) ?? ''}`
+    const isImageTerminal = /kitty|ghostty|iterm/i.test(term) || (await $.env.get('KITTY_WINDOW_ID')) !== undefined
+    await update($, view, v => ({ ...v, pixels: isImageTerminal ? 'image' as const : 'blocks' as const }))
     return next(e)
   })
 
@@ -292,7 +389,7 @@ export const register: Register = on => {
     const pictures = await read($, shots)
     const r = await read($, remote)
     const { game } = await read($, where)
-    const { selected, isRealtime } = await read($, view)
+    const { selected, isRealtime, pixels } = await read($, view)
     const width = Math.max(20, e.props.bodyColumns ?? 60)
     const color = (s: string) => (s === 'passed' || s === 'ok' ? 'success' : s === 'failed' || s === 'fail' || s === 'error' ? 'error' : 'warning')
     const mark = (s: Stage['status']) => (s === 'ok' ? '✔' : s === 'fail' ? '✘' : '…')
@@ -303,10 +400,19 @@ export const register: Register = on => {
     const running = tests.findLast(t => t.status === 'run')
     const chosen = tests.find(t => t.name === selected && t.frame !== '') ?? null
     const testMark = (t: GameTest) => (t.status === 'ok' ? '✔' : t.status === 'fail' ? '✘' : t.status === 'run' ? '⏳' : '·')
-    const Image = e.surface === 'terminal' && 'Image' in ui ? ui.Image : null
+    const Image = e.surface === 'terminal' && pixels === 'image' && 'Image' in ui ? ui.Image : null
+    const Raster = e.surface === 'terminal' && pixels === 'blocks' && 'Raster' in ui ? ui.Raster : null
     const imageColumns = Math.min(width, 72)
-    const imageRows = Math.max(4, Math.round(imageColumns * 9 / 32))
+    // the picture shown: the game live, a test's last frame, the last screenshot
+    const picture = isLive ? c.live : chosen ? chosen.frame : shot?.path ?? ''
+    const blocks = Raster && picture !== '' ? await blocksOf($, picture, imageColumns) : null
+    const imageRows = blocks?.rows ?? Math.max(4, Math.round(imageColumns * 9 / 32))
     liveBox = { columns: imageColumns, rows: imageRows }
+    const drawn = (key: string, generation: number) => (
+      blocks && Raster ? <Raster key={key} columns={imageColumns} rows={blocks.rows} cells={blocks.cells} />
+        : Image ? <Image key={key} source={{ file: picture, format: 'png', generation }} columns={imageColumns} rows={imageRows} alt={picture} />
+          : null
+    )
 
     return (
       <Box flexDirection="column">
@@ -338,21 +444,17 @@ export const register: Register = on => {
             {r.detail !== '' && <Text dimColor> · {r.detail}</Text>}
           </Text>
         )}
-        {isLive && Image && (
-          <Image key="live" source={{ file: c.live, format: 'png', generation: liveGeneration }} columns={imageColumns} rows={imageRows} alt="the game, live" />
-        )}
+        {isLive && drawn('live', liveGeneration)}
         {isLive && <Text><Text color="error" bold>● live</Text><Text dimColor> {running ? running.label : c.stages.at(-1)?.name ?? ''}</Text></Text>}
-        {!isLive && chosen && Image && (
-          <Image key="test" source={{ file: chosen.frame, format: 'png', generation: c?.at ?? 0 }} columns={imageColumns} rows={imageRows} alt={chosen.frame} />
-        )}
+        {!isLive && chosen && drawn('test', c?.at ?? 0)}
         {!isLive && chosen && <Text dimColor>last frame of: {chosen.label}</Text>}
-        {!isLive && !chosen && shot && Image && (
-          <Image key="shot" source={{ file: shot.path, format: 'png', generation: shot.n }} columns={imageColumns} rows={imageRows} alt={shot.path} />
-        )}
+        {!isLive && !chosen && shot && drawn('shot', shot.n)}
         {!isLive && !chosen && shot && <Text dimColor wrap="truncate-start">{shot.path}</Text>}
         <Box flexDirection="row" gap={1}>
           <Button key="test" label="▶ Tests" hotkey="t" onPress={() => void runHere($, 'test')} />
           <Button key="shot" label="📸 Shot" hotkey="s" onPress={() => void runHere($, 'shot')} />
+          {picture !== '' && <Button key="open" label="🖼 Open" hotkey="o" onPress={() => void openOnDesktop($, picture)} />}
+          <Button key="pixels" label={pixels === 'image' ? '🖼 HD' : '▦ Blocks'} hotkey="p" onPress={() => update($, view, v => ({ ...v, pixels: v.pixels === 'image' ? 'blocks' as const : 'image' as const }))} />
           <Button key="speed" label={isRealtime ? '🐢 Game speed' : '⏩ Fast'} hotkey="r" onPress={() => update($, view, v => ({ ...v, isRealtime: !v.isRealtime }))} />
           {c?.status === 'failed' && (
             <Button key="fix" label="🛠 Ask Claude to fix" hotkey="f" onPress={async () => {

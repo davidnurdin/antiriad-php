@@ -14,7 +14,11 @@ next to the conversation that shows what Claude is doing to the game, as it happ
   a key 60 frames, check the paddle reached the bottom). The pane lists them as they run (⏳, then ✔ / ✘), shows
   the game live with the test's name, and after the run the last frame of any test you press.
 - **The screens**: the screenshot `bin/jumphp shot` / `siteshot` just wrote, and every picture Claude reads to
-  look at the game, drawn in the pane (kitty, Ghostty, iTerm2; the path elsewhere).
+  look at the game, drawn in the pane.
+- **Pictures in any terminal**: by default the pictures are drawn as coloured half blocks (`▦ Blocks`), which any
+  truecolor terminal shows (GNOME Terminal, Konsole, Windows Terminal, VS Code…): the engine writes beside each
+  PNG a small raw copy (`.rgb`) for this. In kitty, Ghostty or iTerm2 the pane draws the PNG itself (`🖼 HD`);
+  `p` switches. `🖼 Open` (`o`) opens the picture shown in your desktop's image viewer (`xdg-open`, `open` on macOS).
 - **The playground**: the result of `run_tests` / `get_test_run` (PHPUnit in the playground's sandbox) and of
   `sync_project` when Claude uses the JumPHP playground's MCP server.
 - **Your hands on it**: `▶ Tests` (key `t`) and `📸 Shot` (`s`) run them now, in the pane, without Claude;

@@ -2,26 +2,36 @@
 
 namespace App\Scene;
 
-use JumPHP\Audio\Synth;
+use App\Antiriad\Assets;
+use App\Antiriad\Gfx;
+use App\Antiriad\Ticker;
 use JumPHP\Kernel\Platform;
 use JumPHP\Renderer\Renderer;
 use JumPHP\Ui\MenuScene;
+use JumPHP\Util\Lang;
 
 /**
- * First screen: the title and the main menu.
+ * The title screen of the original, remade: its music, the dashboard under the title, the credits
+ * scrolling in the message line, Tal and the suit facing each other.
  */
 final class TitleScene extends MenuScene
 {
-    protected string $title = 'ANTIRIAD-PHP';
+    protected float $menuTop = 0.40;
+    private Gfx $gfx;
+    private Ticker $ticker;
     private float $time = 0.0;
 
     public function enter(array $params = []): void
     {
+        Assets::boot($this->engine);
+        $this->gfx = Assets::gfx();
         parent::enter($params);
-        // sounds made in PHP: no audio file needed (load real files with $this->sound()->loadSfx())
-        if (!$this->sound()->hasSfx('menu_move')) {
-            $this->sound()->synth('menu_move', Synth::tone(660, 0.04));
-            $this->sound()->synth('menu_confirm', Synth::sequence([[660, 0.05], [990, 0.08]]));
+        $this->menu->selectedColor = [255, 255, 128];
+        $this->menu->color = [0, 128, 255];
+        $this->ticker = new Ticker(8, 312, 131);
+        $this->time = 0.0;
+        if ($this->sound()->getCurrentMusic() !== 'title') {
+            $this->sound()->playMusic('title');
         }
     }
 
@@ -40,16 +50,25 @@ final class TitleScene extends MenuScene
     public function update(float $dt): void
     {
         $this->time += $dt;
+        if (!$this->ticker->busy()) {
+            $this->ticker->push(Lang::t('AFTER THE GAME BY PALACE SOFTWARE 1986   PROGRAMMING ANDREW FITTER   GRAPHICS DANIEL MALONE   MUSIC RICHARD JOSEPH   REMADE IN PHP WITH JUMPHP   '));
+            $this->ticker->push(Lang::t('ARROWS MOVE   UP JUMP / FLY   SPACE THROW / FIRE   DOWN CROUCH / PICK UP   E SUIT'));
+        }
+        $this->ticker->update($dt, $this->font());
         parent::update($dt);
     }
 
     protected function renderBackground(Renderer $r): void
     {
-        $r->clear([16, 16, 40]);
-        // a few moving stars
-        for ($i = 0; $i < 40; $i++) {
-            $x = fmod($i * 37.0 + $this->time * (10 + $i % 5 * 6), $this->width());
-            $r->fillRect($x, ($i * 53) % $this->height(), 1, 1, [120 + $i * 3 % 135, 120, 200]);
-        }
+        $r->clear([0, 0, 0]);
+        $font = $this->font();
+        $font->draw($r, Lang::t('THE SACRED ARMOUR'), 160, 14, 2, [255, 128, 0], 'center', [128, 0, 0]);
+        $font->draw($r, Lang::t('OF ANTIRIAD'), 160, 36, 2, [255, 255, 128], 'center', [128, 0, 0]);
+        // Tal (sprite 9) and the empty suit (sprite 101), from the sheet of the jungle's palette
+        $bob = (int)(2 * sin($this->time * 2));
+        $this->gfx->sprite($r, 11, 9 | 0x80, 30, 70 + $bob, 200);
+        $this->gfx->sprite($r, 11, 101, 266, 70 - $bob, 200);
+        $this->gfx->hud($r, 128);
+        $this->ticker->render($r, $font, [255, 255, 128]);
     }
 }

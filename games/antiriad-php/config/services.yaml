@@ -8,4 +8,4 @@ services:
 
   App\:
     resource: '../src/*'
-    exclude: '../src/Entity'    # entities are created with `new`, not by the container
+    exclude: '../src/Antiriad'  # the game's model (data, rules, objects): created with `new` by the scenes

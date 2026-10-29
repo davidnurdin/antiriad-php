@@ -4,3 +4,10 @@
 /dist/
 /.build/
 /cache/
+# the original game's data, rebuilt from your own disc by tools/extract/extract.sh (private files on the playground)
+/assets/rooms/
+/assets/sprites/
+/assets/hud/
+/assets/data/
+/assets/music/*.ogg
+/assets/sfx/*.ogg

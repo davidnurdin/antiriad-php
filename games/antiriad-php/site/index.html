@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>L'Armure Sacrée d'Antiriad – remake du jeu de plateformes Amstrad CPC, jouer en ligne gratuitement</title>
+<meta name="description" content="Rejouez à L'Armure Sacrée d'Antiriad (Palace Software, 1986) dans votre navigateur : le remake en PHP du classique Amstrad CPC, avec ses 69 écrans, ses graphismes de Dan Malone et la musique de Richard Joseph. Gratuit, sans installation.">
+<link rel="canonical" href="https://{{DOMAIN}}/">
+<link rel="icon" type="image/png" href="images/favicon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="L'Armure Sacrée d'Antiriad">
+<meta property="og:title" content="L'Armure Sacrée d'Antiriad – jouer en ligne">
+<meta property="og:description" content="Le classique Amstrad CPC de 1986, refait en PHP et jouable dans le navigateur : explorez la jungle, retrouvez l'armure sacrée et détruisez la base des envahisseurs.">
+<meta property="og:url" content="https://{{DOMAIN}}/">
+<meta property="og:image" content="https://{{DOMAIN}}/images/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="L'Armure Sacrée d'Antiriad – jouer en ligne">
+<meta name="twitter:description" content="Le classique Amstrad CPC de Palace Software (1986), refait en PHP, jouable gratuitement dans le navigateur.">
+<meta name="twitter:image" content="https://{{DOMAIN}}/images/og.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "L'Armure Sacrée d'Antiriad",
+  "alternateName": ["The Sacred Armour of Antiriad", "La Armadura Sagrada de Antiriad"],
+  "description": "Remake en PHP du jeu de plateformes et d'exploration Amstrad CPC de Palace Software (1986) : Tal, guerrier d'une tribu survivante, retrouve une armure anti-radiations de l'ancien monde, ses quatre modules, et détruit la base des envahisseurs cachée dans un volcan.",
+  "genre": ["Plateformes", "Action", "Exploration"],
+  "gamePlatform": ["Navigateur web", "PC"],
+  "operatingSystem": "Tout navigateur récent",
+  "applicationCategory": "Game",
+  "inLanguage": ["fr", "en", "es"],
+  "isAccessibleForFree": true,
+  "image": "https://{{DOMAIN}}/images/og.png",
+  "screenshot": [
+    "https://{{DOMAIN}}/images/jungle.png",
+    "https://{{DOMAIN}}/images/suit.png",
+    "https://{{DOMAIN}}/images/caves.png",
+    "https://{{DOMAIN}}/images/ruins.png",
+    "https://{{DOMAIN}}/images/base.png"
+  ],
+  "url": "https://{{DOMAIN}}/",
+  "potentialAction": {"@type": "PlayAction", "target": "https://{{DOMAIN}}/play/"}
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Faut-il installer quelque chose pour jouer ?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Non : le jeu tourne dans le navigateur, sur ordinateur comme sur téléphone (avec une manette tactile à l'écran)."}},
+    {"@type": "Question", "name": "Est-ce le jeu d'origine ?",
+     "acceptedAnswer": {"@type": "Answer", "text": "C'est un remake écrit en PHP avec JumPHP. Les écrans, les sprites, la police, les textes et la musique viennent de la disquette Amstrad CPC ; les règles ont été relues dans le code du jeu d'origine."}},
+    {"@type": "Question", "name": "Comment entrer dans l'armure ?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Allez jusqu'à l'armure, accroupissez-vous dessus (bas) ou appuyez sur E. Elle ne bouge qu'avec les bottes anti-gravité."}}
+  ]
+}
+</script>
+<style>
+  :root { --bg: #000; --panel: #00007f; --edge: #0000ff; --text: #ffff80; --hot: #ff8000; --red: #ff0000; --soft: #80c0ff; }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; color: var(--text); background: var(--bg); font: 17px/1.55 "Courier New", ui-monospace, monospace; }
+  img { image-rendering: pixelated; image-rendering: crisp-edges; max-width: 100%; height: auto; display: block; }
+  a { color: var(--soft); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header { text-align: center; padding: 28px 0 12px; }
+  header .row { display: flex; align-items: center; justify-content: center; gap: 24px; }
+  header .row img { width: 72px; }
+  h1 { color: var(--hot); font-size: clamp(26px, 6vw, 48px); line-height: 1.1; margin: 0; letter-spacing: 2px; text-shadow: 3px 3px 0 #800000; text-transform: uppercase; }
+  h1 small { display: block; color: var(--text); font-size: 0.55em; letter-spacing: 1px; margin-top: 8px; }
+  .lead { max-width: 720px; margin: 18px auto 0; color: #fff; }
+  .play { display: inline-block; margin: 22px 0 6px; padding: 14px 34px; font: bold 24px/1 "Courier New", monospace; color: #000;
+          background: var(--hot); border: 3px solid var(--text); text-decoration: none; text-transform: uppercase; letter-spacing: 2px; box-shadow: 6px 6px 0 var(--red); }
+  .play:hover, .play:focus { background: var(--text); }
+  .hint { color: var(--soft); font-size: 14px; }
+  section { margin: 34px 0; padding: 18px; border: 3px solid var(--edge); background: #00003a; box-shadow: inset 0 0 0 3px var(--panel); }
+  h2 { color: var(--hot); text-transform: uppercase; letter-spacing: 1px; font-size: 22px; margin: 0 0 12px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  figure { margin: 0; }
+  figure img { width: 100%; border: 2px solid var(--panel); }
+  figcaption { font-size: 14px; color: var(--soft); margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--panel); vertical-align: top; }
+  th { color: var(--soft); font-weight: normal; }
+  .modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 0; list-style: none; }
+  .modules li { border-left: 4px solid var(--red); padding-left: 10px; }
+  footer { text-align: center; color: var(--soft); font-size: 14px; padding: 10px 0 40px; }
+  @media (max-width: 520px) { body { font-size: 16px; } header .row img { width: 48px; } section { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="row">
+      <img src="images/sprite-tal.png" alt="Tal, le guerrier, sprite du jeu" width="96" height="168">
+      <h1>L'Armure Sacrée d'Antiriad<small>Amstrad CPC · Palace Software · 1986</small></h1>
+      <img src="images/sprite-suit.png" alt="L'armure sacrée vide, sprite du jeu" width="96" height="164">
+    </div>
+    <p class="lead">Une guerre nucléaire a rendu l'humanité à l'âge de pierre. Les envahisseurs règnent depuis leur base cachée dans un volcan. Tal part chercher la relique de sa tribu : l'armure « ANTI-RAD » de l'ancien monde.</p>
+    <a class="play" href="play/">Jouer</a>
+    <p class="hint">Dans le navigateur, gratuit, sans installation · clavier, manette ou écran tactile</p>
+  </header>
+
+  <section>
+    <h2>Le jeu</h2>
+    <p>Un monde ouvert de <strong>69 écrans</strong> à explorer : la jungle et ses arbres géants, les grottes radioactives, les ruines souterraines, puis la base des envahisseurs. Sans armure, Tal est fragile : il saute, lance des pierres et s'accroupit pour ramasser ce qu'il trouve. Dans l'armure, il encaisse les coups, vole et tire, à condition d'avoir retrouvé ses modules et d'économiser son énergie.</p>
+    <div class="shots">
+      <figure><img src="images/jungle.png" alt="Tal dans la jungle, sous un arbre géant, face à une créature" width="640" height="400" loading="lazy"><figcaption>La jungle : Tal, sans armure, lance une pierre.</figcaption></figure>
+      <figure><img src="images/suit.png" alt="Tal saute vers l'armure sacrée posée dans un temple" width="640" height="400" loading="lazy"><figcaption>Le temple où repose l'armure sacrée.</figcaption></figure>
+      <figure><img src="images/caves.png" alt="L'armure tire un rayon pulsé dans les grottes roses" width="640" height="400" loading="lazy"><figcaption>Les grottes : le rayon pulsé de l'armure.</figcaption></figure>
+      <figure><img src="images/ruins.png" alt="L'armure dans les ruines souterraines de l'ancien monde" width="640" height="400" loading="lazy"><figcaption>Les ruines de l'ancien monde.</figcaption></figure>
+      <figure><img src="images/base.png" alt="La salle des machines de la base des envahisseurs" width="640" height="400" loading="lazy"><figcaption>Le cœur de la base, dans le volcan.</figcaption></figure>
+      <figure><img src="images/title.png" alt="L'écran titre du remake" width="640" height="400" loading="lazy"><figcaption>L'écran titre, avec la musique d'origine.</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Les quatre modules de l'armure</h2>
+    <ul class="modules">
+      <li><strong>Les bottes anti-gravité</strong> : sans elles, l'armure ne bouge pas. Avec, elle marche et vole.</li>
+      <li><strong>Le rayon pulsé</strong> : l'arme de l'armure.</li>
+      <li><strong>L'annulateur de particules</strong> : le blindage qui protège des radiations de la base.</li>
+      <li><strong>La mine à implosion</strong> : à déposer sur le cœur de la base pour en finir.</li>
+    </ul>
+    <p>Chaque vol, chaque tir et chaque coup vident l'énergie de l'armure : les cellules de recharge la remplissent. Sans armure, la vie de Tal baisse au contact des créatures et dans les grottes irradiées ; dans l'armure, elle revient. Cinq vies (« rajeunissements »), peu d'indications : on apprend en explorant.</p>
+  </section>
+
+  <section>
+    <h2>Les commandes</h2>
+    <table>
+      <tr><th>Clavier</th><td>Flèches : marcher · Haut : sauter (voler dans l'armure) · Espace : lancer une pierre / tirer · Bas : s'accroupir, ramasser, entrer dans l'armure · E : entrer dans l'armure / en sortir · Échap : pause</td></tr>
+      <tr><th>Manette</th><td>Croix ou stick : marcher · A : sauter / voler · X : lancer / tirer · Y : armure · Start : pause</td></tr>
+      <tr><th>Téléphone</th><td>Pavé de flèches à l'écran (haut = sauter / voler) · FEU : lancer / tirer · ARMURE : entrer / sortir · en mode paysage</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Un remake fidèle</h2>
+    <p>Ce remake est écrit en PHP avec <a href="https://github.com/davidnurdin/jumPhp">JumPHP</a> et tourne dans le navigateur grâce à WebAssembly. Les écrans, les sprites, la police, les textes et la musique viennent de la disquette de la version CPC, lus par <a href="https://github.com/davidnurdin/dsk2jumphp">dsk2jumphp</a> là où le code du jeu les lit : la carte des sorties, les collisions par couleur, les scripts de déplacement des créatures, la chute de Tal, les dégâts, les radiations… Les messages existent en français, en anglais et dans l'espagnol de la disquette.</p>
+    <p>Le jeu d'origine : <em>The Sacred Armour of Antiriad</em> (<em>Rad Warrior</em> aux États-Unis), Palace Software, 1986, sur Amstrad CPC, ZX Spectrum et Commodore 64. Programmation Andrew Fitter, graphismes Dan Malone, musique Richard Joseph. Tous les droits du jeu d'origine appartiennent à leurs détenteurs.</p>
+    <p style="text-align:center"><a class="play" href="play/">Jouer maintenant</a></p>
+  </section>
+
+  <footer>
+    Remake non officiel, fait avec JumPHP · <a href="play/">Jouer à L'Armure Sacrée d'Antiriad</a>
+  </footer>
+</div>
+</body>
+</html>

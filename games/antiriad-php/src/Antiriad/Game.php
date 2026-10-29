@@ -228,11 +228,16 @@ final class Game
             $h->invulnerable--;
         }
         $this->dashboardTick();
-        if ($h->dying()) {
+        if ($h->dying()) {                        // the room goes on while he dies (nothing hurts him)
             $this->dyingTicks++;
-            if ($h->dyingTick($this->dyingTicks)) {
+            if ($h->dyingTick($this->room, $this->dyingTicks)) {
                 $this->regenerate();
             }
+            foreach ($this->actors as $a) {
+                $a->tick($h->x, $h->y);
+            }
+            $this->missiles();
+            $this->actors = array_values(array_filter($this->actors, fn (Actor $a) => !$a->dead));
             return;
         }
         if ($this->entering >= 0) {

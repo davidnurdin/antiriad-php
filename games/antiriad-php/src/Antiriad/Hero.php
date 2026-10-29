@@ -144,10 +144,9 @@ final class Hero
         return $this->anim === self::DYING || $this->anim === self::GETTING_UP;
     }
 
+    /** #5816: he falls where he is; a jump or a fall goes on (its drift too) while he dies. */
     public function die(): void
     {
-        $this->rise = -1;
-        $this->drift = 0;
         $this->setAnim(self::DYING);
     }
 
@@ -158,10 +157,19 @@ final class Hero
     }
 
     /** The dying animation and the lying time (2.7 s as in the emulator, frames 1110-1244): true when over. */
-    public function dyingTick(int $ticks): bool
+    public function dyingTick(int $room, int $ticks): bool
     {
+        if ($this->rise >= 0 || !$this->onGround) {
+            if ($this->drift !== 0) {
+                $this->step($room, $this->drift);
+            }
+            $this->fall($room);
+            if ($this->onGround && $this->rise < 0) {
+                $this->drift = 0;
+            }
+        }
         $this->runAnim();
-        return $this->anim === self::DYING && $ticks >= 40;
+        return $this->anim === self::DYING && $ticks >= 32;     // 107 frames in the emulator (#5816 -> #15)
     }
 
     public function crouched(): bool
@@ -209,17 +217,21 @@ final class Hero
         $joyDir = ($in['right'] ? 8 : 0) | ($in['left'] ? 4 : 0);
         $grounded = $this->onGround && $this->rise < 0;
         if ($grounded) {
-            // #6659: jumps. Fire walking, or fire with the way he faces standing: forward; up standing
-            // sideways: straight up (up walking only stops him: the automaton). Jump (Z) = fire walking.
+            // #6659: jumps. Fire walking, or fire + up + the way he faces standing: forward (fire + a way
+            // alone throws: #6687 wants two bits of up / left / right); up standing
+            // sideways: up, forward when a direction is held (#66AB keeps #B407's). Up walking: forward too
+            // (asked for on keyboards; the original's #8F3B reads up + right as right and keeps walking).
             $standing = $this->anim === self::STAND_L || $this->anim === self::STAND_R;
             $walking = $this->anim === self::WALK_L || $this->anim === self::WALK_R;
             $ahead = $in['right'] && $this->facing > 0 || $in['left'] && $this->facing < 0;
-            if ($walking && ($in['fire'] || $in['jump'])) {
+            if ($walking && ($in['fire'] || $in['jump'] || $in['up'])) {
                 $this->jump($this->facing);
-            } elseif ($standing && ($in['fire'] || $in['jump']) && $ahead) {
+            } elseif ($standing && $in['fire'] && $in['up'] && $ahead) {     // #6682: fire, up and a way
+                $this->jump($this->facing);
+            } elseif ($standing && $in['jump'] && $ahead) {
                 $this->jump($this->facing);
             } elseif ($standing && ($in['up'] || $in['jump'])) {
-                $this->jump(0);
+                $this->jump($ahead ? $this->facing : 0);
             } else {
                 $this->control($room, $in, $joyDir);
             }
@@ -262,7 +274,12 @@ final class Hero
                 $this->setAnim($next);
             }
         }
-        if ($moves & 4) {
+        if (($next === self::THROW_L || $next === self::THROW_R) && $moves !== 0) {
+            // the original's bug, kept: the direction held standing (#6790: joystick AND the row's #04 / #08)
+            // stays in #B407 as the throw starts and moves him a byte with no wall test (#67A4 only refuses
+            // walking): throwing again and again against a wall takes him through it (emulator, room 2)
+            $this->x = max(0, min(79, $this->x + (($moves & 4) ? -1 : 1)));
+        } elseif ($moves & 4) {
             $this->step($room, -1);
         } elseif ($moves & 8) {
             $this->step($room, 1);

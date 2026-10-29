@@ -40,6 +40,9 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   faces standing: forward; up walking only stops him), landing. The ceiling stops
   a jump only at the top of the screen (#6714). Standing facing the player on the suit gets him in: he dissolves in front of it
   (#5D9E / #6E30: 12 masks of #8E22, `sprites/dissolve-PP.png`), then the suit lights up.
+- **Kept bugs**: throwing again and again with the way held against a wall moves Tal a byte each
+  throw, no wall test (`Hero::control`): he goes through walls, as in the original.
+- **Death** (#5816): 32 ticks (107 frames), a jump or fall goes on, the room keeps moving; then #15.
 - **The suit**: #17 (just in / come down facing the player: left / right steps out), #16, #18-#1B; with
   the boots it hangs in the air, up / down move it. The first time in, the dashboard starts (#8E12
   flicker, then score, dial, bars a unit a tick); it is lit (`hud-lit.png`, `sprites-PP-lit.png`: pens

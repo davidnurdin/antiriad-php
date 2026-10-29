@@ -29,13 +29,11 @@ for name, n in (('sprite-tal', 9), ('sprite-suit', 101), ('sprite-armoured', 22)
     s = sprites[n]
     scaled(sheet.crop((s['x'], s['y'], s['x'] + s['w'], s['y'] + s['h'])), 4).save(f'{site}/{name}.png', optimize=True)
 
-# share card 1200 x 630 and favicon
+# share card 1200 x 630 (also the playground directory's picture): one screen of the game, the armour in it,
+# x3 from the CPC's 320 x 200, a 16:9 window of it, framed in black
 og = Image.new('RGB', (1200, 630), (0, 0, 0))
-title = scaled(load('title'), 2)
-game_shot = scaled(load('suit'), 2)
-og.paste(title.crop((0, 0, 640, 400)).resize((560, 350), Image.NEAREST), (20, 140))
-og.paste(game_shot.resize((560, 350), Image.NEAREST), (620, 140))
-og.paste(scaled(load('title'), 2).crop((0, 0, 640, 110)).resize((1200, 120), Image.NEAREST), (0, 10))
+screen = load('armour').resize((320, 200), Image.NEAREST)          # the shot is x2: back to the CPC pixels
+og.paste(scaled(screen.crop((0, 5, 320, 185)), 3), (120, 45))
 og.save(f'{site}/og.png', optimize=True)
 fav = sheet.crop((sprites[101]['x'], sprites[101]['y'], sprites[101]['x'] + 24, sprites[101]['y'] + 41))
 icon = Image.new('RGBA', (48, 48), (0, 0, 0, 255))

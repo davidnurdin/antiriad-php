@@ -114,7 +114,6 @@ class Http
         foreach ($this->running as $request) {
             if (isset($request['curl'])) {
                 curl_multi_remove_handle($this->multi, $request['curl']);
-                curl_close($request['curl']);
             } elseif (isset($request['stream']) && is_resource($request['stream'])) {
                 fclose($request['stream']);
             }
@@ -200,7 +199,6 @@ class Http
                         (string)curl_multi_getcontent($curl), $request['headers'], (string)curl_getinfo($curl, CURLINFO_EFFECTIVE_URL)));
                 }
                 curl_multi_remove_handle($this->multi, $curl);
-                curl_close($curl);
                 break;
             }
         }

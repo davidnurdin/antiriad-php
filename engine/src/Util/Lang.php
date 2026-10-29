@@ -37,6 +37,12 @@ class Lang
         return $text;
     }
 
+    /** @param array<string, array<string, string>> $tables new translations (hot reload of config/lang.yaml) */
+    public function setTables(array $tables): void
+    {
+        $this->tables = $tables;
+    }
+
     public function setLang(string $lang): void
     {
         $this->lang = $lang;

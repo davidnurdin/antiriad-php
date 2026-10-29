@@ -53,6 +53,8 @@ Le tutoriel complet, pas à pas, est dans **[docs/tutoriel.md](docs/tutoriel.md)
 | G. Serveur | `bin/jumphp deploy:setup` puis `bin/jumphp deploy` | ton domaine en HTTPS : FrankenPHP seul, Traefik + FrankenPHP, ou un Traefik existant |
 | H. GitHub | `bin/jumphp github` (`bin/jumphp pages <id>`) | le dépôt créé avec `gh` (et le jeu sur GitHub Pages) |
 | I. Mettre à jour | `bin/jumphp update` | la dernière version de JumPHP fusionnée dans le projet |
+| J. Commande `jumphp` | `bin/jumphp cli:install` (proposé par l'assistant) | `jumphp <commande>` de n'importe quel dossier du projet, `jumphp new <dossier>`, et une question quand une nouvelle version sort sur Packagist |
+| K. Google Play | `bin/jumphp twa <id> --url https://…` | le jeu en appli Android (.aab pour le Play Store, .apk), voir [docs/android.md](docs/android.md) |
 
 ### Démarrage rapide
 
@@ -105,7 +107,7 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 | `games/pong/` | jeu de référence : contre l'ordinateur, à deux sur un clavier, en ligne |
 | `games/breakout/` | casse-briques écrit par une IA à partir d'AGENTS.md |
 | `games/hello-threads/` | POC des threads (TrueAsync) : une fractale calculée par un pool de threads |
-| `docker/` | moteur WebAssembly, runtimes bureau (PHP 8.3, et PHP 8.6 ZTS + TrueAsync), relais réseau, serveur web FrankenPHP |
+| `docker/` | moteur WebAssembly, runtimes bureau (PHP 8.5, et PHP 8.6 ZTS + TrueAsync), relais réseau, serveur web FrankenPHP |
 | `tools/` | scripts utilisés par `bin/jumphp` (packaging, captures, contrôles) |
 | `docs/` | documentation détaillée (français) |
 
@@ -137,10 +139,10 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 
 ### Comment ça marche
 
-- **Bureau** : PHP 8.3 CLI + extensions SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL
+- **Bureau** : PHP 8.5 CLI + extensions SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL
   ([php-opengl](https://github.com/Ponup/php-opengl)) et OpenAL ([php-openal](https://github.com/Ponup/php-openal)), dans Docker, avec
   l'affichage et le son de l'hôte. Boucle ReactPHP, conteneur Symfony DI, événements Evenement.
-- **Navigateur** : le même PHP 8.3 et les mêmes extensions compilés en WebAssembly avec emscripten
+- **Navigateur** : le même PHP 8.5 et les mêmes extensions compilés en WebAssembly avec emscripten
   ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)) : OpenGL devient WebGL, OpenAL devient Web Audio, et la 3D
   s'écrit une seule fois pour les deux cibles. Le navigateur appelle une frame PHP par
   `requestAnimationFrame`. Les sauvegardes vont dans IndexedDB. Le jeu est un dossier statique.
@@ -234,6 +236,8 @@ The complete step-by-step tutorial is **[docs/tutorial.md](docs/tutorial.md)**. 
 | G. Server | `bin/jumphp deploy:setup` then `bin/jumphp deploy` | your domain over HTTPS: FrankenPHP alone, Traefik + FrankenPHP, or an existing Traefik |
 | H. GitHub | `bin/jumphp github` (`bin/jumphp pages <id>`) | the repository created with `gh` (and the game on GitHub Pages) |
 | I. Update | `bin/jumphp update` | the newest JumPHP merged into the project |
+| J. `jumphp` command | `bin/jumphp cli:install` (offered by the wizard) | `jumphp <command>` from any folder of the project, `jumphp new <folder>`, and a question when a new version is out on Packagist |
+| K. Google Play | `bin/jumphp twa <id> --url https://…` | the game as an Android app (.aab for the Play Store, .apk), see [docs/android.md](docs/android.md) |
 
 ### Quick start
 
@@ -286,7 +290,7 @@ breaker was written that way, by an AI that had only read this file.
 | `games/pong/` | reference game: against the computer, two players on one keyboard, online |
 | `games/breakout/` | brick breaker written by an AI from AGENTS.md |
 | `games/hello-threads/` | threads POC (TrueAsync): a fractal computed by a thread pool |
-| `docker/` | WebAssembly engine, desktop runtimes (PHP 8.3, and PHP 8.6 ZTS + TrueAsync), network relay, FrankenPHP web server |
+| `docker/` | WebAssembly engine, desktop runtimes (PHP 8.5, and PHP 8.6 ZTS + TrueAsync), network relay, FrankenPHP web server |
 | `tools/` | scripts used by `bin/jumphp` (packaging, screenshots, checks) |
 | `docs/` | detailed documentation (French) |
 
@@ -318,10 +322,10 @@ breaker was written that way, by an AI that had only read this file.
 
 ### How it works
 
-- **Desktop**: PHP 8.3 CLI + SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL ([php-opengl](https://github.com/Ponup/php-opengl))
+- **Desktop**: PHP 8.5 CLI + SDL2 / SDL_image / SDL_mixer / SDL_ttf, OpenGL ([php-opengl](https://github.com/Ponup/php-opengl))
   and OpenAL ([php-openal](https://github.com/Ponup/php-openal)) extensions, in Docker, using the host's
   display and sound. ReactPHP loop, Symfony DI container, Evenement events.
-- **Browser**: the same PHP 8.3 and extensions compiled to WebAssembly with emscripten
+- **Browser**: the same PHP 8.5 and extensions compiled to WebAssembly with emscripten
   ([php-wasm-sdl](https://github.com/davidnurdin/php-wasm-sdl)): OpenGL becomes WebGL, OpenAL becomes Web Audio, and 3D
   code is written once for both targets. The browser calls one PHP frame per
   `requestAnimationFrame`. Saves go to IndexedDB. The game is a static folder.

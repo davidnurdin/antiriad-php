@@ -39,6 +39,10 @@ Setup
                             + .build/jumphp-runtime.tar.gz (+ .sha256), the release asset (docs/remote.md)
   runtime:download [version]  download it from the GitHub release instead
   update                    merge the newest JumPHP (git remote "jumphp") into the project
+  cli:install               the `jumphp` command for the whole system (~/.local/bin): `jumphp test pong` from
+                            any folder of the project, `jumphp new <folder>`; asks to update when Packagist has
+                            a newer JumPHP (once a day; JUMPHP_NO_UPDATE_CHECK=1: never)
+  cli:uninstall             remove it
   doctor                    check docker, display, sound
 
 Games (<game> = a folder of games/, e.g. pong)
@@ -57,6 +61,10 @@ Games (<game> = a folder of games/, e.g. pong)
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
                             (serve / webshot: JUMPHP_WEB=remote uses dist/remote, JUMPHP_WEB=site dist/site)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
+  twa <game> [--url URL] [--package ID] [--name NAME] [--same-version]
+                            the game as an Android app for Google Play (Trusted Web Activity, Bubblewrap):
+                            dist/android/<game>-<v>.aab (Play) + .apk (a phone) + assetlinks.json (docs/android.md).
+                            URL: the game's page online (https), e.g. https://jumphp.net/<slug>
   deploy [game...]          to your server (JUMPHP_SERVER in .env, see deploy:setup): browser builds + FrankenPHP
                             (alone or behind Traefik), docker compose up there. Default game: JUMPHP_GAME.
                             Without JUMPHP_SERVER: rsync dist/web to $JUMPHP_DEPLOY_TARGET/<game>/
@@ -246,6 +254,117 @@ cmd_new() {
   cp -r skeleton "games/$name"
   php_run "games/$name" -- php /workspace/tools/new-game.php "$name" "$title"
   say "games/$name created. Next: bin/jumphp install $name && bin/jumphp run $name"
+}
+
+# the game as an Android app (tools/twa.sh in docker/twa); asks what it does not know, remembers it in
+# games/<game>/android/twa-manifest.json (in git); the key and the Android SDK stay in ~/.jumphp (never in git)
+cmd_twa() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local url="" package="" name="" bump=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --url) url="${2:-}"; shift ;;
+      --url=*) url="${1#*=}" ;;
+      --package) package="${2:-}"; shift ;;
+      --package=*) package="${1#*=}" ;;
+      --name) name="${2:-}"; shift ;;
+      --name=*) name="${1#*=}" ;;
+      --same-version) bump=0 ;;
+      *) die "unknown option $1" ;;
+    esac
+    shift
+  done
+  local twa="$ROOT/$dir/android/twa-manifest.json"
+  if [ -f "$twa" ]; then
+    [ -n "$package" ] || package="$(sed -nE 's/^ *"packageId": *"([^"]+)".*/\1/p' "$twa")"
+    [ -n "$url" ] || url="$(sed -nE 's/^ *"webManifestUrl": *"([^"]+)".*/\1/p' "$twa")"
+  fi
+  if [ -z "$url" ]; then
+    [ -t 0 ] || die "--url: the game's page online (https), e.g. https://jumphp.net/$game"
+    read -rp "The game's page online (https; on the playground: https://jumphp.net/<slug>): " url
+  fi
+  [[ "$url" =~ ^https?:// ]] || die "--url: an address (https://...)"
+  if [ -z "$package" ]; then
+    local owner suggestion
+    owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]-' '[:lower:]_')"
+    suggestion="io.github.${owner:-me}.$(echo "$game" | tr '-' '_')"
+    if [ -t 0 ]; then
+      read -rp "The app's package on Google Play (never changes once published) [$suggestion]: " package
+    fi
+    package="${package:-$suggestion}"
+  fi
+  [[ "$package" =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]] || die "--package: like io.github.me.my_game (lower case, dots)"
+
+  local home="${JUMPHP_HOME:-$HOME/.jumphp}" accept=0
+  mkdir -p "$home/android/keys" "$home/android-sdk" "$home/gradle" && chmod 700 "$home/android/keys"
+  if [ ! -d "$home/android-sdk/platforms" ]; then
+    say "the Android SDK is needed (~1 GB, once, in $home/android-sdk). Google's license:"
+    echo "    https://developer.android.com/studio/terms" >&2
+    [ -t 0 ] || die "run bin/jumphp twa in a terminal once, to accept the Android SDK's license"
+    local answer; read -rp "Do you accept the Android SDK license? [y/N] " answer
+    [[ "$answer" =~ ^[yYoO] ]] || die "not accepted: no Android app"
+    accept=1
+  fi
+  local image="${JUMPHP_TWA_IMAGE:-jumphp/twa:dev}"
+  docker image inspect "$image" >/dev/null 2>&1 || { say "building $image (first time, ~2 min)"; docker build -t "$image" docker/twa; }
+  local log; log="$(mktemp)"
+  docker run --rm $TTY_FLAGS --network host --user "$(id -u):$(id -g)" \
+    -v "$ROOT:/workspace" -v "$home/android/keys:/keys" -v "$home/android-sdk:/opt/android-sdk" -v "$home/gradle:/gradle" \
+    -e HOME=/tmp/home -e GRADLE_USER_HOME=/gradle -e GAME="$game" -e URL="$url" -e PACKAGE="$package" -e NAME="$name" \
+    -e BUMP="$bump" -e ACCEPT_LICENSE="$accept" \
+    "$image" bash /workspace/tools/twa.sh | tee "$log"
+  local aab apk fingerprint host
+  aab="$(sed -n 's/^AAB=//p' "$log")"; apk="$(sed -n 's/^APK=//p' "$log")"; fingerprint="$(sed -n 's/^FINGERPRINT=//p' "$log")"
+  rm -f "$log"
+  [ -n "$aab" ] || die "no app built (see above)"
+  host="$(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
+  say "done: ${aab#/workspace/} (Google Play), ${apk#/workspace/} (adb install on a phone)"
+  {
+    echo
+    echo "  The key's SHA-256 fingerprint: $fingerprint"
+    echo "  For the app to open full screen (no address bar), $host must say the app is its own:"
+    if [[ "$host" == *jumphp.net ]]; then
+      echo "    on the playground: Studio > your game > Android app: package $package + this fingerprint"
+      echo "    (or your Claude: MCP update_project with android_package and android_fingerprints)"
+    else
+      echo "    serve $dir/dist/android/assetlinks.json at https://$host/.well-known/assetlinks.json"
+    fi
+    echo "  Then Google Play Console (play.google.com/console): create the app ($package), upload the .aab"
+    echo "  (internal testing first). Play App Signing gives a second fingerprint (Setup > App signing): add it too."
+    echo "  The key: $home/android/keys/$package.keystore (+ .env, its password): back them up; never in git."
+    echo "  Next version: bin/jumphp twa $game (the version goes up by one; twa-manifest.json is in git)."
+  } >&2
+}
+
+# the `jumphp` command for the whole system (tools/jumphp-cli): `jumphp test pong` from any folder of a project,
+# `jumphp new <folder>`, and a question when a newer JumPHP is on Packagist. In ~/.local/bin (no sudo).
+cmd_cli_install() {
+  local bin="${JUMPHP_BIN_DIR:-$HOME/.local/bin}"
+  mkdir -p "$bin"
+  install -m 755 "$ROOT/tools/jumphp-cli" "$bin/jumphp"
+  say "installed: $bin/jumphp (jumphp help, jumphp new <folder>, jumphp cli:version)"
+  case ":$PATH:" in
+    *":$bin:"*) ;;
+    *)
+      local rc="$HOME/.bashrc" answer=""
+      case "${SHELL:-}" in */zsh) rc="$HOME/.zshrc" ;; esac
+      warn "$bin is not in your PATH"
+      if [ -t 0 ]; then
+        read -rp "Add it to $rc? [Y/n] " answer
+        case "$answer" in n|N) ;; *)
+          printf '\n# the jumphp command (JumPHP)\nexport PATH="%s:$PATH"\n' "$bin" >> "$rc"
+          say "added to $rc: open a new terminal (or: source $rc)" ;;
+        esac
+      else
+        echo "    add to your shell's profile: export PATH=\"$bin:\$PATH\"" >&2
+      fi ;;
+  esac
+}
+
+cmd_cli_uninstall() {
+  local bin="${JUMPHP_BIN_DIR:-$HOME/.local/bin}"
+  if [ -f "$bin/jumphp" ] && grep -q 'CLI_VERSION=' "$bin/jumphp"; then rm -f "$bin/jumphp"; say "removed: $bin/jumphp"; else say "no jumphp command in $bin"; fi
+  rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/jumphp"
 }
 
 cmd_run() {
@@ -650,6 +769,8 @@ main() {
     server:logs) cmd_server_logs ;;
     server:traefik) cmd_server_traefik "$@" ;;
     update) cmd_update ;;
+    cli:install) cmd_cli_install ;;
+    cli:uninstall) cmd_cli_uninstall ;;
     engine:download) cmd_engine_download "$@" ;;
     engine:pack) cmd_engine_pack ;;
     runtime:build) cmd_runtime_build ;;
@@ -670,6 +791,7 @@ main() {
     webshot) cmd_webshot "$@" ;;
     relay) cmd_relay "$@" ;;
     export:desktop) cmd_export_desktop "$@" ;;
+    twa) cmd_twa "$@" ;;
     deploy) cmd_deploy "$@" ;;
     pages) cmd_pages "$@" ;;
     lint) cmd_lint ;;

@@ -45,6 +45,13 @@ final class Game
             // the test runs the frames: the event loop must not start by itself when PHP ends (ReactPHP runs a
             // loop nobody stopped at shutdown: here, 600 more frames after the tests)
             \React\EventLoop\Loop::stop();
+            // the sound and SDL closed before PHP unloads its extensions: else SDL's audio thread may still run
+            // the code of the unloaded SDL_mixer (a crash when the tests end, 1 run in 5)
+            register_shutdown_function(static function () use ($app): void {
+                $app->engine->closeAudio3d();
+                $app->engine->sound->close();
+                $app->engine->sdl->quit();
+            });
             self::$instance = new self($app, $app->engine, rtrim($root, '/'));
         }
         return self::$instance;

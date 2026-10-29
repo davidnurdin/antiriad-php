@@ -2,8 +2,8 @@
 
 You are working in **JumPHP**, a framework to write **retro 2D games in PHP**. The same PHP code runs:
 
-- on the **desktop** (native PHP 8.3 + SDL2 / OpenGL / OpenAL extensions, in Docker, in a real window with sound),
-- in the **browser** (the same PHP 8.3 + extensions compiled to WebAssembly: OpenGL = WebGL, OpenAL = Web Audio;
+- on the **desktop** (native PHP 8.5 + SDL2 / OpenGL / OpenAL extensions, in Docker, in a real window with sound),
+- in the **browser** (the same PHP 8.5 + extensions compiled to WebAssembly: OpenGL = WebGL, OpenAL = Web Audio;
   the game is a static web page).
 
 Everything (PHP, composer, emscripten, web server, relay server, tests) runs **in Docker** through one
@@ -103,7 +103,7 @@ games/<id>/
 7. **Draw only in `render()`, change state only in `update()`.** Coordinates are virtual pixels
    (`game.yaml` width × height); the engine scales to the window.
 8. **Scenes are reused** (one instance per class, from the container): reset ALL state in `enter()`.
-9. **No `declare(strict_types=1)`** required, PHP 8.2 syntax max (the desktop runs 8.3, the browser 8.3).
+9. **No `declare(strict_types=1)`** required, PHP 8.2 syntax max (the desktop runs 8.5, the browser 8.5).
    Code, identifiers and comments in English. Follow the style of `games/pong`.
 10. **Forbidden words**: `bin/jumphp lint` fails if the repository contains certain brand names
     (`tools/check-forbidden-words.sh`). Do not name games, classes or files after existing commercial games.
@@ -135,10 +135,18 @@ games/<id>/
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
 | `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP), a game with its own web site (`games/<id>/site/index.html`) gets it at the root and the game in `/play/` (`{{DOMAIN}}` replaced in its pages), then checks that `https://<domain>/` answers (shows the server logs if not). Behind a Traefik already on the server: `bin/jumphp server:traefik` prints its entry points and resolver (`JUMPHP_SERVER_MODE` `traefik-external`, or `traefik-passthrough` when it has no working resolver). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
 | `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
+| `bin/jumphp cli:install` / `cli:uninstall` | the `jumphp` command for the whole system (`~/.local/bin/jumphp`, `tools/jumphp-cli`): `jumphp <command>` from any folder of a project, `jumphp new <folder>`, and once a day a question when Packagist has a newer JumPHP (`bin/jumphp update` on a yes) |
+| `bin/jumphp twa <id> --url <page>` | the game as an Android app for Google Play (§14, "Android app") |
 | `bin/jumphp pages [id...]` | builds the games (default: all) + a home page from their `game.json`, force-pushes them as the `gh-pages` branch of the git remote (GitHub Pages: `https://<owner>.github.io/<repo>/`). Publishing: only when asked |
 | `bin/jumphp test engine` | engine unit tests + phpstan |
 | `bin/jumphp lint` | php -l everywhere + forbidden words |
 | `bin/jumphp php <dir> <args>` | php in the runtime image (from a repo-relative dir) |
+
+**A new project** (you ran `composer create-project jumphp/jumphp <folder>` or cloned one for the user): ask the
+user once whether to install the `jumphp` command for the whole system (`bin/jumphp cli:install`: then
+`jumphp test <id>` works from any folder, `jumphp new` makes other projects, and they are told when a new
+JumPHP is out, updating only if they say yes). Install it only on a yes; it changes their `~/.local/bin` (and,
+if they agree in the terminal, their shell profile).
 
 Headless runs (`test`, `shot`) use a **fresh temporary `var/`** (options and saves start from the defaults,
 the player's files are never touched; `JUMPHP_VAR=<dir>` forces a folder). They are driven by environment variables:
@@ -321,6 +329,24 @@ Labels and the `$title` are translated with `config/lang.yaml`. Call `$this->ref
 label. Override `renderBackground(Renderer $r)` for a custom background; `$titleScale`, `$menuTop`,
 `$background`, `$titleColor` customise it. Menu sounds: define sfx named `menu_move` and `menu_confirm`.
 Hide `QUIT` in the browser: `if (Platform::isDesktop())`.
+
+**Hot reload** (the playground's online editor and sandbox, ⚡ Live): a file saved goes into the running game
+without reloading the page (`engine/src/Debug/HotReload.php`). Pictures, sounds, `lang.yaml`, `input.yaml`:
+replaced in place. Another data file: the current scene is entered again with its parameters. PHP code,
+`game.yaml`, `services.yaml`, `composer.json`: PHP restarts in the same WebAssembly engine and boots straight
+into the scene that was playing. Its fields are then fresh; a scene whose state is worth keeping while one
+tunes the game (the room, the score, the player's position) implements `JumPHP\Scene\HotReloadable`:
+
+```php
+final class PlayScene extends AbstractScene implements HotReloadable
+{
+    public function hotState(): array { return ['room' => $this->room, 'score' => $this->score, 'lives' => $this->lives]; }
+    public function hotRestore(array $state): void { ['room' => $this->room, 'score' => $this->score, 'lives' => $this->lives] = $state; }  // after enter()
+}
+```
+
+Plain values only (they cross from one version of the code to the next). Do it for the main play scene of a
+game; it changes nothing outside hot reload. `docs/hot-reload.md` has the details.
 
 ---
 
@@ -577,7 +603,7 @@ procedural pictures) off the main thread, so the frame never waits.
     game on PHP 8.6 ZTS + [TrueAsync](https://true-async.github.io), `docker/desktop-async`);
   - `'workers'`: **the browser**: a pool of Web Workers, each running its own PHP engine with the game's
     files (`engine/web/jumphp-worker.js`; cores - 1, at most 4; `?workers=N` in the page URL, 0 = none);
-  - `'frames'`: default desktop runtime (PHP 8.3): jobs run on the main thread between frames,
+  - `'frames'`: default desktop runtime (PHP 8.5): jobs run on the main thread between frames,
     `$tasks->budget` ms per frame (4 by default, at least one job). Also the fallback when no Web Worker
     can start.
   `Tasks::threaded()` is true for the first two. A game must be correct with all three.
@@ -864,6 +890,27 @@ What the playground publishes and how:
   needed. (The user can also do it in Studio → the project → "Fichiers privés".);
 - a game without a picture of its own is photographed by the playground (its screen, in a browser);
 - never put the MCP token or any secret in the repository.
+
+### Android app (Google Play)
+
+When the user wants the game on the Play Store (or "on Android", "an app"): `bin/jumphp twa <id> --url <the
+game's page online, https>` makes a Trusted Web Activity with Google's Bubblewrap, in Docker (docs/android.md).
+It asks the app's package the first time (suggest `io.github.<github user>.<id with _>`; it never changes) and,
+the first time on this computer, **the user must accept the Android SDK license themselves**: tell them to run
+the command in their terminal (`! bin/jumphp twa <id> --url ...` in Claude Code); never accept it for them.
+Then:
+- out: `games/<id>/dist/android/<id>-<version>.aab` (Google Play), `.apk` (a phone), `assetlinks.json`, and the
+  SHA-256 fingerprint of the upload key (printed). `games/<id>/android/twa-manifest.json` goes into git; the key
+  and its password (`~/.jumphp/android/keys/`) never do: tell the user to back them up;
+- the site must vouch for the app, or it opens with an address bar: on the playground, `update_project` with
+  `android_package` and `android_fingerprints`; on one's own server, `dist/android/assetlinks.json` served at
+  `https://<domain>/.well-known/assetlinks.json` (`bin/jumphp deploy` serves `site/.well-known/` if you copy it there);
+- the name under the icon: game.yaml `pwa: {short_name: ...}` (12 characters show whole on most phones);
+- the Play Console is the user's (their developer account): list the steps (create the app with the same
+  package, internal testing with the .aab, then **add Google Play's app signing fingerprint** with
+  `update_project` too, store listing with `bin/jumphp shot` screenshots);
+- a new version of the app (name, icon): `bin/jumphp twa <id>` again (versionCode + 1). The game itself updates
+  with the site, no new app needed.
 
 ## 15. Reference
 

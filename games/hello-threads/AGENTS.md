@@ -21,7 +21,7 @@ bin/jumphp build hello-threads && bin/jumphp webshot hello-threads 12 '[[1,"Ente
   frame) to compare the times.
 - **Runtime**: `game.yaml runtime: async` → `bin/jumphp` uses the PHP 8.6 ZTS + TrueAsync image
   (`docker/desktop-async`). In the browser the pool uses Web Workers (`Tasks::backend() === 'workers'`); on
-  the default PHP 8.3 runtime it runs the jobs between frames. The panel shows which backend runs.
+  the default PHP 8.5 runtime it runs the jobs between frames. The panel shows which backend runs.
 - **Scenes**: `TitleScene` (menu) → `FractalScene` ; overlay `PauseScene`.
 - **Thread code**: `src/Work/Fractal.php`, pure static code (excluded from the container in
   `config/services.yaml`). Jobs are `static fn` with plain arguments; results are strings of iteration bytes,

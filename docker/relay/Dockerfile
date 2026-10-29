@@ -1,6 +1,6 @@
 # Multiplayer relay / lobby / WebRTC signalling server of php-wasm-network (plain PHP, no dependency).
 # Same commit as the engine's wasmnet extension (docker/engine-wasm NETWORK_REF).
-FROM php:8.3-cli-alpine
+FROM php:8.5-cli-alpine
 ARG NETWORK_REF=a898904e58d445501dc98e5d2cf029632c449618
 RUN apk add --no-cache git \
     && docker-php-ext-install pcntl \

@@ -26,10 +26,19 @@ class SceneManager
     private float $fade = 0.0;        // 0 = clear, 1 = black
     private int $fadeDirection = 0;   // 1 = going dark, -1 = coming back
     private float $fadeSpeed = 4.0;   // 1 / seconds per half
+    /** @var \WeakMap<Scene, array> the parameters each scene was entered with (hot reload: entered again) */
+    private \WeakMap $params;
 
     public function __construct()
     {
         $this->resolver = static fn (string $class): Scene => new $class();
+        $this->params = new \WeakMap();
+    }
+
+    /** The parameters $scene was entered with. */
+    public function paramsOf(Scene $scene): array
+    {
+        return $this->params[$scene] ?? [];
     }
 
     public function setEngine(Engine $engine): void
@@ -152,6 +161,7 @@ class SceneManager
             $this->current()?->pause();
         }
         $this->stack[] = $scene;
+        $this->params[$scene] = $params;
         $scene->enter($params);
     }
 }

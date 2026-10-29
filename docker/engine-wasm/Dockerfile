@@ -1,4 +1,4 @@
-# JumPHP WebAssembly engine: PHP 8.3 (embed SAPI) + SDL2 / SDL_image / SDL_mixer / SDL_ttf / GD / zlib
+# JumPHP WebAssembly engine: PHP 8.5 (embed SAPI) + SDL2 / SDL_image / SDL_mixer / SDL_ttf / GD / zlib
 # + wasmnet (php-wasm-network) compiled with emscripten. Output: php-web.mjs + php-web.wasm.
 # The engine is shared by every game: build it once (`bin/jumphp engine:build`, ~25 min cold, cached after).
 #
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get --no-install-recommends -y install \
     && rm -rf /var/lib/apt/lists/*
 
 FROM build_tool AS php_src
-ARG PHP_BRANCH=PHP-8.3.0
+ARG PHP_BRANCH=php-8.5.12
 ARG PHP_SDL_REF=89855c8f4f63b77f9a548007b9c4afe366785b4b
 ARG SDL_IMAGE_REF=fd798eb2c52b7be5874a30334d1d255436aa686e
 ARG SDL_MIXER_REF=f75a31826f4484bb4af31c1a1a4cdf1463aae8b2
@@ -35,6 +35,9 @@ RUN set -eux; \
     fetch Ponup/php-openal              "$PHP_OPENAL_REF" /src/php-src/ext/openal; \
     mkdir -p /src/php-src/ext/sdl; \
     cp -r /tmp/php-sdl/src/* /src/php-src/ext/sdl/; \
+    sed -i 's/zend_exception_get_default()/zend_ce_exception/g' /src/php-src/ext/sdl/*.c /src/php-src/ext/sdl/*.h; \
+    # emscripten's libc declares reallocarray() without having it: PHP's own copy (glob), renamed
+    sed -i 's/\breallocarray\b/php_glob_reallocarray/g' /src/php-src/main/php_glob.c; \
     cp -r /src/php-wasm-network/ext/wasmnet /src/php-src/ext/wasmnet
 
 # config.m4 replacements: link the emscripten SDL ports (-sUSE_SDL*=2) instead of the system libraries
@@ -71,7 +74,7 @@ RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache cd /src/php-src &
         --enable-embed=static --with-layout=GNU \
         --enable-sdl --with-sdl_image --enable-sdl_ttf --with-sdl_mixer --enable-wasmnet --enable-opengl --enable-openal \
         --enable-gd --with-png \
-        --disable-all --disable-cgi --disable-cli --disable-phpdbg --disable-opcache --disable-fiber-asm \
+        --disable-all --disable-cgi --disable-cli --disable-phpdbg --disable-opcache --disable-opcache-jit --disable-fiber-asm \
         --disable-rpath --without-pear --with-valgrind=no --without-pcre-jit --disable-mbregex \
         --enable-bcmath --enable-ctype --enable-mbstring --with-zlib --enable-tokenizer \
         --with-config-file-scan-dir=/src/php
@@ -85,7 +88,7 @@ RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache cd /src/php-src &
 RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache mkdir /build && cd /src/php-src && emcc $OPTIMIZE \
         -o /build/php-web.mjs \
         --llvm-lto 2 -flto -fno-inline \
-        -s EXPORTED_FUNCTIONS='["_phpw_run","_chdir","_setenv","_php_embed_init","_php_embed_shutdown","_zend_eval_string"]' \
+        -s EXPORTED_FUNCTIONS='["_phpw_run","_phpw_restart","_chdir","_setenv","_php_embed_init","_php_embed_shutdown","_zend_eval_string"]' \
         -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall","UTF8ToString","lengthBytesUTF8","FS"]' \
         -s ENVIRONMENT=web \
         -s USE_SDL=2 -s USE_ZLIB=1 -s USE_LIBPNG=1 -s USE_SDL_IMAGE=2 -s USE_SDL_MIXER=2 -s USE_SDL_TTF=2 \
@@ -99,7 +102,8 @@ RUN --mount=type=cache,target=/emsdk/upstream/emscripten/cache mkdir /build && c
         --js-library /src/php-wasm-network/js/library_wasmnet.js \
         /src/phpw.o .libs/libphp.a \
     && cp /src/php-wasm-network/js/php-wasm-network.js /build/ \
-    && echo "{\"php\":\"8.3\",\"network\":\"$NETWORK_REF\",\"opengl\":true,\"openal\":true}" > /build/engine.json
+    && PHP_MINOR="$(sed -nE 's/^#define PHP_VERSION "([0-9]+\.[0-9]+).*/\1/p' /src/php-src/main/php_version.h)" \
+    && echo "{\"php\":\"$PHP_MINOR\",\"network\":\"$NETWORK_REF\",\"opengl\":true,\"openal\":true}" > /build/engine.json
 
 FROM scratch
 COPY --from=php-wasm /build/ .

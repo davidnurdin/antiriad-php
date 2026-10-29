@@ -4,7 +4,7 @@ Seul Docker est nécessaire. Images utilisées :
 
 | Image | Rôle | Construite par |
 |---|---|---|
-| `jumphp/desktop:dev` | PHP 8.3 CLI + extensions SDL, OpenGL et OpenAL (mêmes forks, commits et patch que le moteur wasm) + GD, composer, Xvfb (OpenGL sans écran : `jumphp-xvfb`) | `bin/jumphp setup` (`docker/desktop/Dockerfile`) |
+| `jumphp/desktop:dev` | PHP 8.5 CLI + extensions SDL, OpenGL et OpenAL (mêmes forks, commits et patch que le moteur wasm) + GD, composer, Xvfb (OpenGL sans écran : `jumphp-xvfb`) | `bin/jumphp setup` (`docker/desktop/Dockerfile`) |
 | `jumphp/desktop-async:dev` | PHP 8.6 ZTS (fork TrueAsync) + `ext/async` + libuv + les mêmes extensions SDL, OpenGL et OpenAL (avec `php86-compat.h`), pour les jeux `runtime: async` ([async.md](async.md)) | `bin/jumphp setup async` ou au premier usage (`docker/desktop-async/Dockerfile`, ~15 min) |
 | moteur wasm (sortie fichiers, pas d'image) | `build/engine/php-web.{mjs,wasm}`, `php-wasm-network.js`, `engine.json` | `bin/jumphp engine:build` (`docker/engine-wasm`, buildx bake, cache `.cache/buildx-engine`) |
 | `emscripten/emsdk:3.1.35` | `file_packager` (données du jeu) | téléchargée |
@@ -14,7 +14,7 @@ Seul Docker est nécessaire. Images utilisées :
 
 ## Le moteur WebAssembly (`docker/engine-wasm`)
 
-Repris de php-wasm-sdl : `emscripten/emsdk:3.1.35`, PHP-8.3.0 (SAPI embed, statique), extensions
+Repris de php-wasm-sdl : `emscripten/emsdk:3.1.35`, php-8.5.12 (SAPI embed, statique), extensions
 `davidnurdin/php-sdl`, `kea/php-sdl-image`, `kea/php-sdl-mixer`, `kea/php-sdl-ttf` (leurs `config.m4`
 remplacés pour lier les ports emscripten `-sUSE_SDL*=2`), `wasmnet` de php-wasm-network,
 [`Ponup/php-opengl`](https://github.com/Ponup/php-opengl) (OpenGL → WebGL 1, `-lGL`) et

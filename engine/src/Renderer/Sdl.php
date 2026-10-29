@@ -29,6 +29,8 @@ class Sdl
     private array $textures = [];
     /** @var array<string, array{path: string, group: ?string, transparent: ?array}> */
     private array $registered = [];
+    /** @var array<string, array{0: string, 1: ?array}> the file of each loaded texture, its colour key (hot reload) */
+    private array $sources = [];
     private string $variant = '';
 
     public function __construct(private GameConfig $config)
@@ -135,6 +137,7 @@ class Sdl
             throw new \RuntimeException("Texture '$name': file not found: $file");
         }
         $this->releaseTexture($name);
+        $this->sources[$name] = [$file, $transparent];
 
         $size = @getimagesize($file);
         $width = $size ? (int)$size[0] : 0;
@@ -154,6 +157,24 @@ class Sdl
         }
 
         return $this->textures[$name] = $slices;
+    }
+
+    /**
+     * The loaded textures of these files (absolute paths) loaded again from them: a picture changed while the game
+     * runs (hot reload). @return int how many
+     *
+     * @param string[] $files
+     */
+    public function reloadFiles(array $files): int
+    {
+        $count = 0;
+        foreach ($this->sources as $name => [$file, $transparent]) {
+            if (isset($this->textures[$name]) && in_array($file, $files, true)) {
+                $this->loadTexture($name, $file, $transparent);
+                $count++;
+            }
+        }
+        return $count;
     }
 
     /** Declares a texture loaded on first use (getTextures) or with its group (loadGroup). */

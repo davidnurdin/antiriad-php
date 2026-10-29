@@ -1,9 +1,0 @@
-# Engine defaults (up, down, left, right, confirm, back, pause) + the paddles.
-actions:
-  p1_up: [W, Z, pad0:up]
-  p1_down: [S, pad0:down]
-  p2_up: [Up, pad1:up]
-  p2_down: [Down, pad1:down]
-  # alone (vs computer, online): any of the keys
-  solo_up: [W, Z, Up, pad0:up, touch:up]
-  solo_down: [S, Down, pad0:down, touch:down]

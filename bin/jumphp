@@ -100,6 +100,14 @@ ensure_desktop_image() {
   docker image inspect "$DESKTOP_IMAGE" >/dev/null 2>&1 || { say "building $DESKTOP_IMAGE (first time, ~3 min)"; docker build -t "$DESKTOP_IMAGE" --build-context ext=docker/ext docker/desktop; }
 }
 
+# JUMPHP_LIVE=1: the headless runs write their current frame to var/live/frame.png (the Claude Code pane
+# jumphp-live shows it as it changes); said once per run, with its path on this machine
+live_announce() {
+  [ -n "${JUMPHP_LIVE:-}" ] || return 0
+  mkdir -p "$ROOT/var/live" && rm -f "$ROOT/var/live/frame.png"
+  say "live frames: $ROOT/var/live/frame.png"
+}
+
 # php_run <workdir repo-relative> [docker flags...] -- <command...>
 php_run() {
   local wd="$1"; shift
@@ -115,6 +123,7 @@ php_run() {
   docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" \
     -v "$ROOT:/workspace" -w "/workspace/$wd" \
     -e HOME=/tmp -e COMPOSER_HOME=/tmp/composer -e COMPOSER_CACHE_DIR=/workspace/.cache/composer \
+    ${JUMPHP_LIVE:+-e JUMPHP_LIVE=/workspace/var/live/frame.png -e JUMPHP_LIVE_EVERY=${JUMPHP_LIVE_EVERY:-10}} \
     ${flags[@]+"${flags[@]}"} "$image" "$@"
 }
 
@@ -296,6 +305,7 @@ cmd_test() {
     say "$dir: phpunit"
     php_run "$dir" -e SDL_VIDEODRIVER=dummy -e SDL_AUDIODRIVER=dummy -- /workspace/engine/vendor/bin/phpunit --bootstrap vendor/autoload.php tests
   fi
+  live_announce
   say "$dir: headless smoke test (${JUMPHP_MAX_FRAMES:-600} frames$([ -n "$(gl_flags "$dir")" ] && echo ', OpenGL on Xvfb'))"
   # shellcheck disable=SC2046
   php_run "$dir" $(gl_flags "$dir") -e JUMPHP_SMOKE=1 -e "JUMPHP_MAX_FRAMES=${JUMPHP_MAX_FRAMES:-600}" \
@@ -309,6 +319,7 @@ cmd_shot() {
   local frames="${2:-120}" out="${3:-var/screenshots/shot.png}"
   ensure_vendor "$dir"
   rm -f "$ROOT/$dir/${out%.png}"-[0-9]*.png   # frames of an earlier JUMPHP_SHOT_EVERY run
+  live_announce
   # shellcheck disable=SC2046
   php_run "$dir" $(gl_flags "$dir") -e "JUMPHP_SCREENSHOT=$out" -e "JUMPHP_MAX_FRAMES=$frames" -e "JUMPHP_SHOT_EVERY=${JUMPHP_SHOT_EVERY:-0}" \
     -e "JUMPHP_SCENE=${JUMPHP_SCENE:-}" -e "JUMPHP_SCENE_PARAMS=${JUMPHP_SCENE_PARAMS:-}" -e "JUMPHP_INPUT=${JUMPHP_INPUT:-}" \

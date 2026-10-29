@@ -14,6 +14,8 @@ export type Check = {
   summary: string
   /** what failed: PHPUnit's failed tests, PHP warnings and errors */
   failures: string[]
+  /** the picture the run rewrites as it goes (JUMPHP_LIVE: bin/jumphp says `live frames: <path>`), or '' */
+  live: string
   at: number
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "jumphp-live",
-  "version": "0.1.0",
-  "description": "JumPHP beside the chat: the checks of bin/jumphp test live, the screenshots Claude takes and reads, the playground's PHPUnit runs; rerun, capture or tell Claude from the pane",
+  "version": "0.2.0",
+  "description": "JumPHP beside the chat: the game's screen live while it runs, the checks of bin/jumphp test as they go, the screenshots Claude takes and reads, the playground's PHPUnit runs; rerun, capture or tell Claude from the pane",
   "types": "./types/index.d.ts",
   "license": "MIT",
   "repository": "https://github.com/davidnurdin/jumPhp"

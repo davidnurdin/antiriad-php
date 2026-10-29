@@ -1,7 +1,8 @@
 // jumphp-live: a JumPHP pane beside the chat while Claude makes a game.
 //  - Claude's `bin/jumphp test|shot|siteshot …` commands: their output copied to a log (tee) the pane follows
 //    live, each check (php -l, phpstan, phpunit, smoke test) marked ✔ / ✘, what failed.
-//  - The pictures: those `bin/jumphp shot` / `siteshot` write and those Claude reads (Read of a .png).
+//  - The game's screen while it runs (JUMPHP_LIVE: the engine rewrites var/live/frame.png, the pane swaps it in),
+//    the pictures `bin/jumphp shot` / `siteshot` write and those Claude reads (Read of a .png).
 //  - The playground (MCP jumphp): its PHPUnit runs, its publications.
 //  - Buttons: run the tests or take a screenshot now (here, live), ask Claude to fix; a field to tell Claude.
 import { atom, read, update } from 'claude-code'
@@ -13,7 +14,7 @@ const PANE = 'jumphp-live'
 const TITLE = 'JumPHP'
 const MAX_LOG = 12_000
 
-const check = atom({ plugin: 'jumphp-live', key: 'check' } as const, null as Check | null, { shape: 'check-1' })
+const check = atom({ plugin: 'jumphp-live', key: 'check' } as const, null as Check | null, { shape: 'check-2' })
 const shots = atom({ plugin: 'jumphp-live', key: 'shots' } as const, [] as Shot[], { shape: 'shots-1' })
 const remote = atom({ plugin: 'jumphp-live', key: 'remote' } as const, null as Remote | null, { shape: 'remote-1' })
 const where = atom({ plugin: 'jumphp-live', key: 'where' } as const, { root: '', game: '' } as Where, { shape: 'where-1' })
@@ -22,6 +23,9 @@ const where = atom({ plugin: 'jumphp-live', key: 'where' } as const, { root: '',
 const JUMPHP = /(?:^|[\s;&|(])(?:\.\/)?bin\/jumphp\s+(test|shot|siteshot|webshot)\b[ \t]*([\w.-]*)/
 const PICTURE = /\.(png|jpe?g|webp)$/i
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g
+const LIVE = /live frames: (\/\S+\.png)/
+/** how often the live picture is swapped while a run goes on */
+const LIVE_MS = 200
 
 const clip = (text: string): string => (text.length > MAX_LOG ? text.slice(-MAX_LOG) : text)
 
@@ -29,7 +33,7 @@ const clip = (text: string): string => (text.length > MAX_LOG ? text.slice(-MAX_
 export function stagesOf(log: string, status: Check['status']): Stage[] {
   const names = [...log.matchAll(/==> (?:[^\s:]+: )?([^\n]+)/g)]
     .map(m => (m[1] ?? '').trim().replace(/ \(.*$/, ''))
-    .filter(name => !/all checks passed/.test(name))
+    .filter(name => !/all checks passed|^live frames/.test(name))
   return names.map((name, i): Stage => ({
     name,
     status: i < names.length - 1 || status === 'passed' ? 'ok' : status === 'running' ? 'run' : 'fail',
@@ -52,18 +56,47 @@ export function picturesIn(log: string): string[] {
 }
 
 let seen = 0
+/** the live picture's box as last drawn (a swap keeps the size), and whether a loop swaps it */
+let liveBox = { columns: 0, rows: 0 }
+let liveGeneration = 0
+let isWatching = false
 
 async function begin($: Engine, kind: string, game: string, by: Check['by']): Promise<void> {
   const at = await $.clock.now()
-  await update($, check, (): Check => ({ game, kind, by, status: 'running', stages: [], log: '', summary: '', failures: [], at }))
+  await update($, check, (): Check => ({ game, kind, by, status: 'running', stages: [], log: '', summary: '', failures: [], live: '', at }))
   if (game) {
     await update($, where, w => ({ ...w, game }))
   }
   void $.ui.open({ id: PANE, title: TITLE })
+  void watchLive($)
 }
 
 function progress($: Engine, log: string): Promise<unknown> {
-  return update($, check, c => (c ? { ...c, log: clip(log), stages: stagesOf(log, 'running') } : c))
+  const live = LIVE.exec(log)?.[1] ?? ''
+  return update($, check, c => (c ? { ...c, log: clip(log), stages: stagesOf(log, 'running'), live: c.live || live } : c))
+}
+
+/** while a run goes on, the live picture swapped in the pane a few times a second (no redraw) */
+async function watchLive($: Engine): Promise<void> {
+  if (isWatching) {
+    return
+  }
+  isWatching = true
+  try {
+    for (;;) {
+      const c = await read($, check)
+      if (!c || c.status !== 'running') {
+        break
+      }
+      if (c.live !== '' && liveBox.columns > 0) {
+        liveGeneration += 1
+        await $.ui.blit({ requestId: PANE, key: 'live', source: { file: c.live, format: 'png', generation: liveGeneration }, ...liveBox }).catch(() => undefined)
+      }
+      await $.clock.sleep(LIVE_MS)
+    }
+  } finally {
+    isWatching = false
+  }
 }
 
 async function finish($: Engine, log: string, isOk: boolean): Promise<void> {
@@ -125,7 +158,7 @@ async function runHere($: Engine, kind: 'test' | 'shot'): Promise<void> {
   let log = ''
   let code = 1
   try {
-    const run = $.process.spawn({ argv: ['bin/jumphp', kind, game], cwd: root || undefined })
+    const run = $.process.spawn({ argv: ['bin/jumphp', kind, game], cwd: root || undefined, env: { JUMPHP_LIVE: '1' } })
     for (;;) {
       const piece = await run.next()
       if (piece.done) {
@@ -167,7 +200,7 @@ export const register: Register = on => {
     const file = `/tmp/jumphp-live-${at}-${Math.floor(Math.random() * 1e6)}.log`
     await begin($, m[1] ?? 'test', m[2] || (await read($, where)).game, 'claude')
     const live = follow($, file)
-    const ran = await next({ ...e, command: `{ ${e.command}\n} 2>&1 | tee ${file}; ( exit \${PIPESTATUS[0]} )` })
+    const ran = await next({ ...e, command: `{ export JUMPHP_LIVE=1\n${e.command}\n} 2>&1 | tee ${file}; ( exit \${PIPESTATUS[0]} )` })
     await live.stop()
     const result = 'result' in ran && ran.result ? (ran.result as { stdout?: string; stderr?: string }) : {}
     await finish($, `${result.stdout ?? ''}\n${result.stderr ?? ''}`, ran.deny === undefined && ran.isError !== true)
@@ -219,8 +252,11 @@ export const register: Register = on => {
     const mark = (s: Stage['status']) => (s === 'ok' ? '✔' : s === 'fail' ? '✘' : '…')
     const logLines = c ? c.log.split('\n').filter(l => l.trim() !== '').slice(c.status === 'running' ? -8 : -4) : []
     const shot = pictures[0]
+    const isLive = c !== null && c.status === 'running' && c.live !== ''
     const Image = e.surface === 'terminal' && 'Image' in ui ? ui.Image : null
     const imageColumns = Math.min(width, 72)
+    const imageRows = Math.max(4, Math.round(imageColumns * 9 / 32))
+    liveBox = { columns: imageColumns, rows: imageRows }
 
     return (
       <Box flexDirection="column">
@@ -247,10 +283,14 @@ export const register: Register = on => {
             {r.detail !== '' && <Text dimColor> · {r.detail}</Text>}
           </Text>
         )}
-        {shot && Image && (
-          <Image key="shot" source={{ file: shot.path, format: 'png', generation: shot.n }} columns={imageColumns} rows={Math.max(4, Math.round(imageColumns * 9 / 32))} alt={shot.path} />
+        {isLive && Image && (
+          <Image key="live" source={{ file: c.live, format: 'png', generation: liveGeneration }} columns={imageColumns} rows={imageRows} alt="the game, live" />
         )}
-        {shot && <Text dimColor wrap="truncate-start">{shot.path}</Text>}
+        {isLive && <Text color="error" bold>● live</Text>}
+        {!isLive && shot && Image && (
+          <Image key="shot" source={{ file: shot.path, format: 'png', generation: shot.n }} columns={imageColumns} rows={imageRows} alt={shot.path} />
+        )}
+        {!isLive && shot && <Text dimColor wrap="truncate-start">{shot.path}</Text>}
         <Box flexDirection="row" gap={1}>
           <Button key="test" label="▶ Tests" hotkey="t" onPress={() => void runHere($, 'test')} />
           <Button key="shot" label="📸 Shot" hotkey="s" onPress={() => void runHere($, 'shot')} />

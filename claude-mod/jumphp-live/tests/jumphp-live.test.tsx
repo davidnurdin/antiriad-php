@@ -15,6 +15,7 @@ const PANE = {
 } as const
 
 const FAILED = [
+  '==> live frames: /work/game/var/live/frame.png',
   '==> games/pong: php -l',
   '==> games/pong: phpstan',
   '==> games/pong: phpunit',
@@ -47,6 +48,8 @@ test("Claude's bin/jumphp test is followed, its checks marked, what failed shown
   expect(ran).toContain('bin/jumphp test pong')
   expect(ran).toContain('| tee /tmp/jumphp-live-')
   expect(ran).toContain('PIPESTATUS[0]')
+  // the engine writes the game's screen as it runs
+  expect(ran).toContain('export JUMPHP_LIVE=1')
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -54,6 +57,8 @@ test("Claude's bin/jumphp test is followed, its checks marked, what failed shown
     expect((await ui.find({ type: 'Text', text: /✔ php -l/ }))?.text).toBe('✔ php -l   ✔ phpstan   ✘ phpunit')
     expect((await ui.find({ type: 'Text', text: /testBonus/ }))?.text).toBe('✘ Tests\\ScoreTest::testBonus')
     expect((await ui.find({ type: 'Text', text: /^Tests: 4/ }))?.text).toBe('Tests: 4, Assertions: 4, Failures: 1.')
+    // the run's last frame stays shown once it is over
+    expect((await ui.find({ type: 'Text', text: /frame\.png$/ }))?.text).toBe('/work/game/var/live/frame.png')
     await ui.unmount()
   }
 })

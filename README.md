@@ -160,8 +160,8 @@ seulement dans `var/`.
 ### Avec Claude Code : le panneau JumPHP
 
 Le mod `jumphp-live` (`claude-mod/jumphp-live/`) ajoute à Claude Code un panneau à côté de la conversation : les
-vérifications de `bin/jumphp test` en direct (✔ / ✘ par étape, les tests PHPUnit en échec), les captures que
-Claude prend et regarde, les tests du playground ; des boutons pour relancer les tests, prendre une capture, ou
+l'écran du jeu en direct pendant qu'il tourne, les vérifications de `bin/jumphp test` (✔ / ✘ par étape, les tests
+PHPUnit en échec), les captures que Claude prend et regarde, les tests du playground ; des boutons pour relancer les tests, prendre une capture, ou
 demander une correction à Claude, et un champ pour lui écrire. À taper dans Claude Code :
 
 ```
@@ -341,7 +341,8 @@ integers, network only through `JumPHP\Net`, write files only into `var/`.
 ### With Claude Code: the JumPHP pane
 
 The `jumphp-live` mod (`claude-mod/jumphp-live/`) gives Claude Code a pane beside the conversation: the checks of
-`bin/jumphp test` live (✔ / ✘ per step, the failing PHPUnit tests), the screenshots Claude takes and looks at, the
+`bin/jumphp test` live and the game's screen while it runs (✔ / ✘ per step, the failing PHPUnit tests), the
+screenshots Claude takes and looks at, the
 playground's test runs; buttons to run the tests again, take a screenshot or ask Claude for a fix, and a field to
 write to it. In Claude Code:
 

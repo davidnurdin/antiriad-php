@@ -6,6 +6,10 @@ next to the conversation that shows what Claude is doing to the game, as it happ
 - **The checks, live**: when Claude runs `bin/jumphp test <game>`, its output streams into the pane and each check
   is marked as it goes: `✔ php -l   ✔ phpstan   … phpunit   smoke test`. When it ends: PHPUnit's summary and
   what failed (the failed tests, PHP warnings and errors).
+- **The game's screen, live**: while `bin/jumphp test` (its smoke test) or `shot` runs the game, the pane shows
+  its screen as it changes (`● live`): the engine rewrites `var/live/frame.png` every few frames (`JUMPHP_LIVE`), the
+  pane swaps it in several times a second. A project made before JumPHP had `JUMPHP_LIVE` (October 2026) needs
+  its `bin/jumphp` and `engine/` brought up to date for this; the rest works without.
 - **The screens**: the screenshot `bin/jumphp shot` / `siteshot` just wrote, and every picture Claude reads to
   look at the game, drawn in the pane (kitty, Ghostty, iTerm2; the path elsewhere).
 - **The playground**: the result of `run_tests` / `get_test_run` (PHPUnit in the playground's sandbox) and of
@@ -31,5 +35,5 @@ In your JumPHP project (the folder with `bin/jumphp`), start Claude Code and typ
 first time Claude runs `bin/jumphp test` or `shot`.
 
 How it follows Claude's commands: a Bash command of Claude's that runs `bin/jumphp test|shot|siteshot|webshot` is
-run as `{ <command> } 2>&1 | tee <log>` with its exit status kept, and the pane follows that log. Other commands
-are not touched.
+run as `{ export JUMPHP_LIVE=1; <command> } 2>&1 | tee <log>` with its exit status kept, and the pane follows
+that log. Other commands are not touched.

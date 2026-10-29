@@ -141,9 +141,14 @@ def save_pens(pens, pal, path, width=None):
     img.save(path)
 
 
+MIRRORED = 0x93B2
+
+
 def sprite_pens(n):
     """#6D3C: sprite n, one source byte = 4 pixels through #0200/#0300, ORed with its colour.
-    A screen byte whose two pixels are 0 in the source keeps the background: None there."""
+    A screen byte whose two pixels are 0 in the source keeps the background: None there.
+    #73F0 mirrors a sprite's bytes in place when it is asked the other way round than last time and keeps
+    that way in #93B2 + n (bit 7): such a sprite is turned back here, every sheet faces the bit-7-clear way."""
     a, cw, h = w16(SPRITES + n * 4), m[SPRITES + n * 4 + 2], m[SPRITES + n * 4 + 3]
     c = m[SPRITE_COLOUR + n]
     rows = []
@@ -157,7 +162,7 @@ def sprite_pens(n):
                     row += [None, None]
                 else:
                     row += list(mode0_pixels(raw | c))
-        rows.append(row)
+        rows.append(row[::-1] if m[MIRRORED + n] & 0x80 else row)
     return rows
 
 

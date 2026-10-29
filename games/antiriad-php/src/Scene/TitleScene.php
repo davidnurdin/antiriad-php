@@ -4,7 +4,7 @@ namespace App\Scene;
 
 use App\Antiriad\Assets;
 use JumPHP\Renderer\Renderer;
-use JumPHP\Scene\AbstractScene;
+use JumPHP\Ui\MenuScene;
 use JumPHP\Util\Lang;
 
 /**
@@ -12,8 +12,9 @@ use JumPHP\Util\Lang;
  * the credits over the dashboard, with the title tune. Fire / Enter starts, Escape opens the options.
  * The disc is the Spanish edition: in Spanish the capture is shown whole; in the other languages its lines
  * are written again, translated, with the original font, colour and rows (one every 16 lines).
+ * A MenuScene with one hidden row (PLAY), so that the automatic pause never covers it.
  */
-final class TitleScene extends AbstractScene
+final class TitleScene extends MenuScene
 {
     private const BLUE = [0, 128, 255];
     private const CREDITS = [
@@ -24,12 +25,13 @@ final class TitleScene extends AbstractScene
         'DANIEL MALONE',
         'EMILIO',
         'RICHARD JOSEPH',
-        '@ PALACE SOFTWARE MCMLXXXVII',     // @ = the font's copyright sign,
+        '@ PALACE SOFTWARE MCMLXXXVII',     // @ = the font's copyright sign
     ];
 
     public function enter(array $params = []): void
     {
         Assets::boot($this->engine);
+        parent::enter($params);
         if (!$this->sdl()->hasTexture('title')) {
             $this->sdl()->loadTexture('title', 'assets/title/title.png');
         }
@@ -38,15 +40,24 @@ final class TitleScene extends AbstractScene
         }
     }
 
+    protected function items(): array
+    {
+        return [['PLAY', null, fn () => $this->scenes()->switchTo(PlayScene::class)]];
+    }
+
+    protected function back(): void
+    {
+        $this->scenes()->push(OptionsScene::class);
+    }
+
     public function update(float $dt): void
     {
-        $a = $this->actions();
-        if ($a->isPressed('confirm') || $a->isPressed('fire') || $a->isPressed('jump')) {
+        if ($this->actions()->isPressed('fire') || $this->actions()->isPressed('jump')) {
             $this->sound()->playSfx('menu_confirm');
             $this->scenes()->switchTo(PlayScene::class);
-        } elseif ($a->isPressed('back')) {
-            $this->scenes()->push(OptionsScene::class);
+            return;
         }
+        parent::update($dt);
     }
 
     public function render(Renderer $r): void

@@ -42,8 +42,8 @@ icon = Image.new('RGBA', (48, 48), (0, 0, 0, 255))
 icon.paste(fav.resize((24, 41), Image.NEAREST), (12, 3), fav)
 icon.save(f'{site}/favicon.png')
 
-# the directory's picture (16:9): the suit in action, framed in black
+# the directory's picture (16:9): a screen of the game, Tal under the empty armour
 thumb = Image.new('RGB', (640, 360), (0, 0, 0))
-thumb.paste(scaled(load('suit'), 2).crop((0, 0, 640, 360)), (0, 0))
+thumb.paste(load('armour').crop((0, 16, 640, 376)), (0, 0))   # the shot is already x2: a 16:9 window of it
 thumb.save(f'{game}/assets/thumbnail.png', optimize=True)
 icon.save(f'{game}/assets/icon.png')

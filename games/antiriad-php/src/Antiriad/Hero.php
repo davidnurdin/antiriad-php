@@ -15,15 +15,19 @@ final class Hero
     public const H = 42;
     private const JUMP_FROM = 11;       // fall table index a jump starts from: 8, 7, 6, 5, 4, 4, 3... = 46 lines
 
-    // sprites of the original (the sheet faces right; bit 7 = mirrored, facing left), animations #9021 1-#15
+    // sprites of the original (the sheets face left; bit 7 = mirrored, facing right: #0B-#13 are #02-#0A | #80)
     private const WALK = [3, 4, 5, 6, 7, 0, 1, 2];
     private const THROW = [17, 17, 18, 18, 19, 19, 19, 17, 17, 8];
     private const IDLE = 9;
-    private const RISE = 15;
-    private const FALL = 16;
+    private const RISE = 16;           // the jump (#11 when going right, seen in the emulator)
+    private const FALL = 15;
     private const LAND = [13, 11];
     private const CROUCH = [10, 11];
-    private const DIE = [123, 124, 124, 124, 124, 124, 124, 124];
+    // #14: Tal collapses where he stands (123, then 124 lying), #15: he gets up (123) and stands (#01)
+    private const DYING = 123;
+    private const DEAD = 124;
+    public const DIE_TICKS = 40;       // 2.7 s on the ground, as in the emulator (frames 1110-1244)
+    public const RISE_TICKS = 6;
     private const SUIT_IDLE = 22;
     private const SUIT_FLY = 23;
     private const SUIT_WALK = [20, 21];
@@ -35,7 +39,7 @@ final class Hero
     public bool $onGround = true;
     public int $fallIndex = 0;
     public int $rise = -1;
-    public string $pose = 'idle';       // idle walk air land crouch throw die
+    public string $pose = 'idle';       // idle walk air land crouch throw die rise
     public int $poseTick = 0;
     public int $frame = self::IDLE;
     public int $invulnerable = 0;
@@ -131,7 +135,8 @@ final class Hero
         return match ($this->pose) {
             'throw' => $this->poseTick >= count(self::THROW),
             'land' => $this->poseTick >= count(self::LAND),
-            'die' => $this->poseTick >= count(self::DIE) + 6,
+            'die' => $this->poseTick >= self::DIE_TICKS,
+            'rise' => $this->poseTick >= self::RISE_TICKS,
             default => true,
         };
     }
@@ -140,7 +145,7 @@ final class Hero
     public function animate(): void
     {
         $t = $this->poseTick++;
-        $mirror = $this->facing < 0 ? 0x80 : 0;
+        $mirror = $this->facing > 0 ? 0x80 : 0;
         if ($this->inSuit) {
             $this->frame = match (true) {
                 $this->flying || !$this->onGround => self::SUIT_FLY,
@@ -155,9 +160,16 @@ final class Hero
             'land' => self::LAND[min($t, 1)],
             'crouch' => self::CROUCH[min($t, 1)],
             'throw' => self::THROW[min($t, count(self::THROW) - 1)],
-            'die' => self::DIE[min($t, count(self::DIE) - 1)],
+            'die' => $t < 6 ? self::DYING : self::DEAD,
+            'rise' => self::DYING,
             default => self::IDLE,
-        } | ($this->pose === 'die' ? 0 : $mirror);
+        } | (in_array($this->pose, ['die', 'rise'], true) ? 0 : $mirror);
+    }
+
+    /** Lines between the top of Tal's box and the top of his sprite: lying, the feet stay on the ground. */
+    public function drawOffset(): int
+    {
+        return self::H - $this->world->sprites[$this->frame & 0x7F]['h'];
     }
 
     /** The throw's frame where the stone leaves the hand. */

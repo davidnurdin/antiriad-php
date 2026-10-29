@@ -13,7 +13,7 @@ namespace App\Antiriad;
  *    the bites hit its energy (#B4FD, 31), halved (and halved again with the particle negator), and Tal's
  *    life comes back. Recharge cells fill the energy. In / out: the suit key, or crouching on it.
  *  - Modules: boots (fly), pulse beam (shoot), implosion mine, particle negator (rooms 0 and 1).
- *  - The end: in the suit, the mine dropped on the base's core (room 0). Five lives ("rejuvenations").
+ *  - The end: in the suit, the mine dropped on the base's core (room 0). Five lives ("regenerations": Tal gets up where he fell).
  */
 final class Game
 {
@@ -55,11 +55,14 @@ final class Game
     public bool $demo = false;
     public int $flash = 0;
     public int $tick = 0;
-    private array $entry = [];
     private bool $shownInert = false;
     private bool $lowWarned = false;
     private int $suitCooldown = 0;
     private int $hazardCooldown = 0;
+    /** the room's first object (the original's slot 2): the big head that drops bombs, the base's turret */
+    private ?Actor $leader = null;
+    /** its missile (the original's first free slot after the room's objects): one at a time */
+    private ?Actor $missile = null;
 
     public function __construct(private World $world, array $params = [])
     {
@@ -104,6 +107,8 @@ final class Game
         foreach ($this->world->rooms[$room]['objects'] as [$x, $y, $program, $type]) {
             $this->actors[] = new Actor($this->world, $type, $x, $y, $program);
         }
+        $this->leader = $this->actors[0] ?? null;
+        $this->missile = null;
         foreach ($this->world->cells as $i => [$r, $x, $y]) {
             if ($r === $room && empty($this->cellsTaken[$i])) {
                 $a = new Actor($this->world, 0x1C, $x, $y);
@@ -121,7 +126,6 @@ final class Game
         if (!$this->hero->inSuit && $this->suit[0] === $room) {
             $this->actors[] = new Actor($this->world, 0x36, $this->suit[1], $this->suit[2]);
         }
-        $this->entry = [$this->hero->x, $this->hero->y];
         if ($room <= 1) {                       // #7113: the base is irradiated
             if ($this->modules[self::NEGATOR]) {
                 $this->say(21);
@@ -195,10 +199,10 @@ final class Game
         if ($h->invulnerable > 0) {
             $h->invulnerable--;
         }
-        if ($h->pose === 'die') {
+        if ($h->pose === 'die' || $h->pose === 'rise') {
             $h->animate();
             if ($h->poseDone()) {
-                $this->respawn();
+                $h->pose === 'die' ? $this->regenerate() : $h->setPose('idle');
             }
             return;
         }
@@ -207,6 +211,7 @@ final class Game
         foreach ($this->actors as $a) {
             $a->tick($h->x, $h->y);
         }
+        $this->missiles();
         $this->collisions($in);
         $this->actors = array_values(array_filter($this->actors, fn (Actor $a) => !$a->dead));
         if ($this->tick % self::PERIOD === 0) {
@@ -324,6 +329,34 @@ final class Game
         }
     }
 
+    /**
+     * #5598: the big head (#27) drops a bomb (#2E, program #23) from 5 bytes right and #15 lines down of
+     * itself, one at a time; a bomb is gone at line #A0. #5642: the base's turret (#2B) fires a beam (#32
+     * then #33, program #29) from x #1B line #7F, gone at x #46.
+     */
+    private function missiles(): void
+    {
+        $m = $this->missile;
+        if ($m !== null && !$m->dead && ($m->type === 0x2E && $m->y >= 0xA0 || $m->type === 0x33 && $m->x >= 0x46)) {
+            $m->dead = true;
+        }
+        $l = $this->leader;
+        if ($l === null || $l->dead || $m !== null && !$m->dead) {
+            return;
+        }
+        if ($l->type === 0x27) {
+            $this->missile = new Actor($this->world, 0x2E, $l->x + 5, $l->y + 0x15, 0x23);
+        } elseif ($l->type === 0x2B) {
+            $this->missile = new Actor($this->world, 0x33, 0x1B, 0x7F, 0x29);   // harmful as #33 (#922A)
+            $this->missile->setAnim(0x32);
+            $l->setAnim(0x2B);
+            $this->sound('shoot');
+        } else {
+            return;
+        }
+        $this->actors[] = $this->missile;
+    }
+
     private function useEnergy(int $n): void
     {
         $this->energy = max(0, $this->energy - $n);
@@ -429,13 +462,9 @@ final class Game
                 case Actor::HAZARD:
                     $this->bite($a);
                     break;
-                case Actor::BEAM:                 // #5BFF: the suit crosses it, it stops Tal
-                    if ($h->inSuit) {
-                        if ($this->tick % 4 === 0) {
-                            $this->sound('beam');
-                        }
-                    } else {
-                        $this->life = 0;
+                case Actor::BEAM:                 // #5BFF: a separating line, it only sounds when crossed
+                    if ($this->tick % 4 === 0) {
+                        $this->sound('beam');
                     }
                     break;
                 case Actor::ITEM:
@@ -526,7 +555,8 @@ final class Game
         $this->sound('death');
     }
 
-    private function respawn(): void
+    /** #15: a regeneration: Tal gets up where he fell, his life full again; the room goes on as it was. */
+    private function regenerate(): void
     {
         $this->lives--;
         if ($this->lives <= 0) {
@@ -536,21 +566,15 @@ final class Game
         }
         $this->say([1 => 5, 2 => 4, 3 => 3][$this->lives] ?? 2);
         $h = $this->hero;
-        [$h->x, $h->y] = $this->entry;
-        $h->rise = -1;
-        $h->fallIndex = 0;
-        $h->onGround = false;
-        $h->setPose('idle');
-        $h->invulnerable = 24;
+        $h->setPose('rise');
+        $h->animate();
         $this->life = self::MAX_LIFE;
         if ($this->room <= 1 && !$this->modules[self::NEGATOR]) {
-            // no coming back to life in the base without the negator: back to the suit's room
+            // the base kills at once without the negator: get up in the suit's room instead
             $room = $this->suit[0] >= 0 ? $this->suit[0] : $this->world->start[0][0];
             [$h->x, $h->y] = $this->suit[0] >= 0 ? [min(66, $this->suit[1] + 7), $this->suit[2]] : [$this->world->start[0][1], $this->world->start[0][2]];
             $this->enterRoom($room);
-            return;
         }
-        $this->enterRoom($this->room);
     }
 
     private function take(Actor $a, array $in): void

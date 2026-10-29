@@ -2,6 +2,7 @@
 
 namespace App\Antiriad;
 
+use JumPHP\Audio\Synth;
 use JumPHP\Kernel\Engine;
 
 /**
@@ -26,8 +27,9 @@ final class Assets
             foreach (self::SFX as $name) {
                 $sound->loadSfx($name, "assets/sfx/$name.ogg");
             }
-            $sound->loadSfx('menu_move', 'assets/sfx/step.ogg');
-            $sound->loadSfx('menu_confirm', 'assets/sfx/pickup.ogg');
+            // menus: soft short notes (the game's own effects are too harsh there)
+            $sound->synth('menu_move', Synth::tone(660, 0.04, 'triangle', 0.25));
+            $sound->synth('menu_confirm', Synth::sequence([[523, 0.05], [784, 0.08]], 'triangle', 0.3));
             foreach (['title', 'death', 'victory'] as $name) {
                 $sound->loadMusic($name, "assets/music/$name.ogg");
             }

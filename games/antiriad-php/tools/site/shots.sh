@@ -19,4 +19,5 @@ shot suit 150 '{"room":63,"x":12,"y":130,"modules":[0,1]}' '[[10,"right","hold"]
 shot caves 90 '{"room":9,"x":40,"y":120,"suit":true,"modules":[0,1],"energy":22}' '[[10,"left","hold"],[50,"up","hold"],[80,"fire"]]'
 shot ruins 90 '{"room":45,"x":20,"y":100,"suit":true,"modules":[0,1,3]}' '[[10,"right","hold"],[60,"fire"]]'
 shot base 90 '{"room":0,"x":20,"y":120,"suit":true,"modules":[0,1,2,3]}' '[[10,"right","hold"],[40,"up","hold"],[70,"fire"]]'
+shot armour 40 '{"room":63,"x":40,"y":130}' '[[2,"left","hold"],[16,"left","release"]]'
 python3 -I "$DIR/tools/site/images.py" "$OUT" "$DIR"

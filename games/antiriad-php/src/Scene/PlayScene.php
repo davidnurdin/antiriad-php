@@ -136,7 +136,7 @@ final class PlayScene extends AbstractScene
         }
         $h = $g->hero;
         if ($h->invulnerable === 0 || $g->tick % 2 === 0) {
-            $this->gfx->sprite($r, $pal, $h->frame, $h->x * World::PIXELS_PER_BYTE, $h->y - World::TOP);
+            $this->gfx->sprite($r, $pal, $h->frame, $h->x * World::PIXELS_PER_BYTE, $h->y - World::TOP + $h->drawOffset());
         }
         if ($g->flash > 0) {
             $r->fillRect(0, 0, 320, 128, [255, 255, 255, 140]);
@@ -149,6 +149,23 @@ final class PlayScene extends AbstractScene
         $g = $this->game;
         $font = $this->font();
         $this->gfx->hud($r, 128);
+        $this->ticker->render($r, $font, self::TEXT);
+        // on foot the original's dashboard stays dark (emulator, life 1 included): the suit lights it
+        if ($g->hero->inSuit || $g->countdown !== null) {
+            $this->renderSuitPanel($r);
+        }
+        if (($g->over || $g->won) && $this->endTime > 0.5) {
+            $text = \JumPHP\Util\Lang::t($g->won ? 'VICTORY' : 'GAME OVER');
+            $w = $font->width($text, 2) + 16;
+            $r->fillRect(160 - $w / 2, 48, $w, 30, [0, 0, 0, 200]);
+            $font->draw($r, $text, 160, 56, 2, $g->won ? self::TEXT : self::RED, 'center');
+        }
+    }
+
+    private function renderSuitPanel(Renderer $r): void
+    {
+        $g = $this->game;
+        $font = $this->font();
         // the two bars of the left panel: the suit's energy, Tal's life
         $low = $g->energy < 7 && $g->tick % 6 < 3;
         $r->fillRect(39, 152, (int)round(34 * $g->energy / Game::MAX_ENERGY), 8, $low ? [128, 0, 0] : self::RED);
@@ -160,23 +177,12 @@ final class PlayScene extends AbstractScene
                 $r->fillRect($x + 1, $y + 1, 6, 6, self::RED);
             }
         }
-        // the centre screen: the lives, or the mine's countdown; the round one: the cell Tal carries
+        // the centre screen: the mine's countdown; the round one: the cell Tal carries
         if ($g->countdown !== null) {
             $font->draw($r, (string)max(0, intdiv($g->countdown, 15)), 163, 160, 2, self::RED, 'center');
-        } else {
-            for ($i = 0; $i < min(5, $g->lives); $i++) {
-                $r->fillRect(146 + $i * 7, 164, 5, 8, self::RED);
-            }
         }
         if ($g->carryingCell) {
             $this->gfx->sprite($r, $g->palette(), 28, 224, 158, 200);
-        }
-        $this->ticker->render($r, $font, self::TEXT);
-        if (($g->over || $g->won) && $this->endTime > 0.5) {
-            $text = \JumPHP\Util\Lang::t($g->won ? 'VICTORY' : 'GAME OVER');
-            $w = $font->width($text, 2) + 16;
-            $r->fillRect(160 - $w / 2, 48, $w, 30, [0, 0, 0, 200]);
-            $font->draw($r, $text, 160, 56, 2, $g->won ? self::TEXT : self::RED, 'center');
         }
     }
 }

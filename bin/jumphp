@@ -369,7 +369,7 @@ cmd_android() {
   fi
   if [ -z "$package" ]; then
     # the TWA's package if the game has one: the native app replaces it on Google Play (same package, same key)
-    package="$(sed -nE 's/^ *"packageId": *"([^"]+)".*/\1/p' "$ROOT/$dir/android/twa-manifest.json" 2>/dev/null)"
+    package="$(sed -nE 's/^ *"packageId": *"([^"]+)".*/\1/p' "$ROOT/$dir/android/twa-manifest.json" 2>/dev/null || true)"
     local owner suggestion
     owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]-' '[:lower:]_')"
     suggestion="${package:-io.github.${owner:-me}.$(echo "$game" | tr '-' '_')}"

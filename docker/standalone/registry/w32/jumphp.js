@@ -3,7 +3,8 @@
 // libraries and the Windows libraries they need.
 function jumphp_includes(ext) {
     var root = PHP_PHP_BUILD + '\\include';
-    ADD_FLAG('CFLAGS_' + ext.toUpperCase(), '/I "' + root + '" /I "' + root + '\\SDL2" /I "' + root + '\\AL"');
+    // + the extension's own folder (its src/*.h include its root's php_<ext>.h, as configure gives on Unix)
+    ADD_FLAG('CFLAGS_' + ext.toUpperCase(), '/I "' + configure_module_dirname + '" /I "' + root + '" /I "' + root + '\\SDL2" /I "' + root + '\\AL"');
 }
 function jumphp_libs(ext, libs) {
     for (var i = 0; i < libs.length; i++) {

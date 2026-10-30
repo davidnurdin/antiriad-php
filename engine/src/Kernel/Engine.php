@@ -105,6 +105,13 @@ class Engine extends EventEmitter
         $this->actions->load($c->file('input.yaml')['actions'] ?? []);
         $this->input->on('quit', fn () => $this->quit());
         $this->input->on('key', fn (int $key) => $this->globalKey($key));
+        if (!Platform::isWasm() && Platform::setting('JUMPHP_TOUCH_CONTROLS')) {
+            // the native Android app: the on-screen controls of the browser version (engine/web/touch.js), drawn here
+            $controls = new \JumPHP\Input\TouchControls($this->input->getKeyboard(), $this->input->getMouse(), $this->input,
+                (array)$c->get('touch', []), $this->font());
+            $this->input->setControls($controls);
+            $this->sdl->getRenderer()->addOverlay([$controls, 'draw']);
+        }
 
         $this->lang->setLang((string)$this->options->get('lang', $c->lang()));
         $this->debug = (bool)Platform::setting('JUMPHP_DEBUG', false);

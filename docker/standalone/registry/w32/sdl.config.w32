@@ -1,10 +1,11 @@
 ARG_ENABLE('sdl', 'SDL2 (JumPHP)', 'no');
 if (PHP_SDL != 'no') {
     jumphp_libs('sdl', ['SDL2-static.lib;SDL2.lib'].concat(JUMPHP_SDL_SYSTEM_LIBS));
-    EXTENSION('sdl', 'src/blendmode.c src/cpuinfo.c src/error.c src/event.c src/filesystem.c src/glcontext.c ' +
-        'src/joystick.c src/keyboard.c src/messagebox.c src/mouse.c src/mutex.c src/php_sdl.c src/pixels.c ' +
-        'src/platform.c src/power.c src/rect.c src/render.c src/rwops.c src/sdl.c src/shape.c src/surface.c ' +
-        'src/timer.c src/version.c src/video.c src/window.c', PHP_SDL_SHARED, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+    // its sources are all in src/: an empty root file (functions.php) for EXTENSION(), src/ by ADD_SOURCES (as opcache)
+    EXTENSION('sdl', 'jumphp_w32.c', PHP_SDL_SHARED, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+    ADD_SOURCES(configure_module_dirname + '\\src', 'blendmode.c cpuinfo.c error.c event.c filesystem.c glcontext.c ' +
+        'joystick.c keyboard.c messagebox.c mouse.c mutex.c php_sdl.c pixels.c platform.c power.c rect.c render.c ' +
+        'rwops.c sdl.c shape.c surface.c timer.c version.c video.c window.c', 'sdl');
     jumphp_includes('sdl');
     AC_DEFINE('HAVE_SDL2', 1);
     AC_DEFINE('HAVE_SDL_GETREVISIONNUMBER', 1);

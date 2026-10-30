@@ -9,6 +9,10 @@ function jumphp_config_w32(string $ext, string $source_dir): void
 {
     $w32 = __DIR__ . '/w32';
     file_put_contents("$source_dir/config.w32", file_get_contents("$w32/jumphp.js") . "\n" . file_get_contents("$w32/$ext.config.w32"));
+    // php-sdl has no source at its root: an empty one for EXTENSION() (w32/sdl.config.w32)
+    if ($ext === 'sdl' && !is_file("$source_dir/jumphp_w32.c")) {
+        file_put_contents("$source_dir/jumphp_w32.c", "/* JumPHP: the root file of php-sdl on Windows (its sources are in src/) */\n");
+    }
 }
 
 /**

@@ -67,6 +67,12 @@ skip=(--skipVersionUpgrade)
 [ "$isNew" = 0 ] && [ "${BUMP:-1}" = 1 ] && skip=()
 say "Android project (bubblewrap update${skip[*]:+, same version})"
 bubblewrap update --manifest="$TWA_JSON" ${skip[@]+"${skip[@]}"} </dev/null
+# the app opens its page in Chrome of the main profile: without it, Android asks which browser (a second Chrome
+# in a dual-space profile made the question, and the app closed when it was dismissed)
+launcher="$PROJECT/app/src/main/java/$(echo "$PACKAGE" | tr . /)/LauncherActivity.java"
+if [ -f "$launcher" ] && ! grep -q createTwaLauncher "$launcher"; then
+  perl -0pi -e 's|(    \@Override\n    protected Uri getLaunchingUrl\(\))|    \@Override\n    protected com.google.androidbrowserhelper.trusted.TwaLauncher createTwaLauncher() {\n        return new com.google.androidbrowserhelper.trusted.TwaLauncher(this, "com.android.chrome");\n    }\n\n$1|' "$launcher"
+fi
 say "build (Gradle: a few minutes the first time)"
 bubblewrap build --manifest="$TWA_JSON" --skipPwaValidation </dev/null
 version="$(node -e 'const m = require(process.argv[1]); console.log(`${m.appVersionName}`)' "$TWA_JSON")"

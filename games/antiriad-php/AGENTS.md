@@ -71,3 +71,7 @@ bin/jumphp build:remote antiriad-php && JUMPHP_WEB=remote bin/jumphp webshot ant
   the saucers, the turret) bites in silence (#5BC4); the others die of it, for their points. Each is played through #752A from room 61 with the game
   started as a player would (else envelopes are lost) and rendered from its own channels only.
 - **Smoke test**: `PlayScene` with `demo: true` (a bot walks, jumps and throws; nothing hurts it).
+
+## Publication
+
+Web, Android (Trusted Web Activity) et Google Play : voir `PUBLISHING.md` (clés, commandes, Play Console, pièges, lancement de l'app).

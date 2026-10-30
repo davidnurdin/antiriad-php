@@ -39,6 +39,20 @@ What blocks or needs work:
 First step: Pong or hello-world compiled by elephc on Linux, to see what passes and the speed gained. PHP stays
 the default (Windows, Android).
 
+## Full native apps in PHP: every system's APIs, an optional HTML / JS / CSS layer, an IDE (likely, by David)
+
+Beyond games: any kind of app written in PHP, with the same packaging (`bin/jumphp android`, `export:standalone`,
+later iOS).
+
+- every system's APIs reachable from PHP through FFI: Android (JNI / NDK: sensors, camera, notifications, files,
+  sharing...), Windows (Win32, WinRT), Linux (D-Bus, GTK...), macOS / iOS (Objective-C runtime, UIKit / AppKit),
+  as PHP classes generated or written over them, the same names everywhere when the systems agree
+- an option to embed an HTML / JS / CSS layer for the app's visual interface (the system's web view: Android
+  WebView, WebView2, WebKitGTK, WKWebView), talking with the PHP side (calls and events both ways); without it, the
+  interface drawn natively (SDL / OpenGL, or the system's widgets through FFI)
+- in the long run: an IDE (a software, itself a JumPHP app) to develop every kind of app: the project, the code,
+  run / test / package for each system, Claude inside
+
 ## Cleaning
 
 - the GitHub pre-release `standalone-1460857eb89286a9`: its Linux micro needs AVX-512 (built for GitHub's

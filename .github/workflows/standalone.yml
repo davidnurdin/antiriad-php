@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t jumphp/standalone:dev docker/standalone
-      - name: StaticPHP (any x86_64, glibc 2.17: docker/standalone/spc-target)
+      - name: StaticPHP (any x86_64, glibc 2.17, docker/standalone/spc-target)
         run: |
           mkdir -p out
           docker run --rm -v "$PWD:/workspace:ro" -v "$PWD/out:/out" \

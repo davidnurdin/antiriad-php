@@ -11,7 +11,7 @@ Les règles générales du moteur sont dans `AGENTS.md` (racine du dépôt) et `
 | Page du jeu (site) | https://jumphp.net/antiriad-php/ | `games/antiriad-php/site/index.html` |
 | Confidentialité | https://github.com/davidnurdin/antiriad-php/blob/main/games/antiriad-php/PRIVACY.md | fichier `PRIVACY.md` (le playground ne sert pas `site/index.html`) |
 | App Android | `io.github.davidnurdin.antiriad_php` | Trusted Web Activity (TWA) qui ouvre le jeu dans Chrome plein écran |
-| Google Play | Play Console, compte Duch'Inc. (développeur 4621944160072167336), appli 4972338030688135653 | piste interne puis production |
+| Google Play | Play Console, compte développeur de l'utilisateur (identifiants dans la console, pas dans le dépôt) | piste interne puis production |
 
 Le jeu lui-même n'est pas dans l'app : l'app est une coquille qui ouvre `https://jumphp.net/antiriad-php/jouer?app=1`. Une mise à jour du jeu est donc en ligne tout de suite, sans nouvelle version Android. Une nouvelle version Android n'est nécessaire que si l'icône, le nom, l'URL de départ, le paquet ou le lanceur changent.
 
@@ -42,6 +42,8 @@ bin/jumphp twa antiriad-php --url https://jumphp.net/antiriad-php/ --package io.
 
 ## 4. Tester sur un téléphone
 
+**Téléphone sans espace clone (multi-bureau).** Le téléphone de test ne doit PAS avoir d'espace clone (« Multi-bureau », « Espace clone », XSpace, utilisateur 999) : son Chrome en double fait apparaître « Ouvrir avec » au lancement de la TWA, et l'app se ferme dès que ce sélecteur disparaît. Vérifier avec `adb shell pm list users` : il ne doit rester que l'utilisateur 0 (et le profil professionnel s'il existe). Supprimer l'espace seulement avec l'accord de l'utilisateur (`adb shell pm remove-user <id>` efface toutes ses apps).
+
 Le téléphone de l'utilisateur est un Xiaomi (Android 14, Chrome 156). Débogage USB activé, autorisation acceptée.
 
 ```bash
@@ -58,7 +60,19 @@ adb exec-out screencap -p > /tmp/x.png   # ou dans var/debug/, pas dans git
 
 ## 5. Google Play, pas à pas
 
-Chemins de la Play Console (à ajouter à `https://play.google.com/console/u/0/developers/4621944160072167336/app/4972338030688135653/`) :
+**État au 30 octobre 2026 (version 7, 1.0.0 (7)) :** toutes les déclarations sont faites (publicités, accès, public cible 18+, IARC, sécurité des données, politique de confidentialité, ID de publicité, gouvernement, finance, santé). La release de production « 7 (7) » a été envoyée pour examen (178 pays, catégorie Arcade, site https://jumphp.net/antiriad-php, adresse de contact confirmée par l'utilisateur, à vérifier dans Store settings). L'examen peut prendre jusqu'à 7 jours.
+
+Ordre qui a marché, à reprendre pour une nouvelle version :
+1. `bin/jumphp twa` (nouveau numéro de version), `adb install` sur le téléphone de test, vérifier l'ouverture ;
+2. Play Console › Contenu de l'appli : déclarations à jour (rien à refaire si rien ne change) ;
+3. Store settings : catégorie et e-mail de contact renseignés (obligatoires, sinon « Your app cannot be published yet ») ;
+4. Piste de production › Créer une release › téléverser le `.aab` › notes `<fr-FR>` › Suivant ;
+5. Pays : Production › Pays / régions › Ajouter, tout sélectionner, Enregistrer (une release sans pays est refusée) ;
+6. Vue d'ensemble de la publication › « Envoyer pour examen », confirmer.
+
+Le bouton « Envoyer pour examen » reste grisé tant qu'une étape de la fiche n'est pas faite (tableau de bord › « Configurer votre appli », X sur 11).
+
+Chemins de la Play Console (à ajouter à l'URL de l'appli dans la console, `…/developers/<id>/app/<id>/`) :
 
 1. **Déclarations** (Contenu de l'appli) : publicités (aucune), accès à l'appli (aucune restriction), public cible (18 ans et plus, ne pas dire « pour enfants »), classification du contenu (questionnaire IARC : catégorie Jeu ; violence fictive, pixel art, pas de gore, pas de drogue, pas de jeux d'argent, pas de contenu généré par les utilisateurs, pas de localisation, pas d'achats), **sécurité des données** (aucune donnée collectée, aucune partagée), **politique de confidentialité** (https://github.com/davidnurdin/antiriad-php/blob/main/games/antiriad-php/PRIVACY.md — jumphp ne sert pas site/index.html), **ID de publicité** (non utilisé).
 2. **Fiche du Play Store** (français) : titre, description courte et longue, icône 512, bannière 1024×500, captures téléphone (`games/antiriad-php/store/`), catégorie Jeu, gratuit.

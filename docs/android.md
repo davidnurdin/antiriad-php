@@ -36,3 +36,14 @@ lists the app's package and the SHA-256 fingerprints of the keys that sign it, t
 The developer account and the Play Console are the user's: create the app with the same package, upload the
 `.aab` in internal testing, add Google's signing fingerprint to the site (above), then the store listing
 (screenshots: `bin/jumphp shot`) and production. The playground's guide: https://jumphp.net/docs/android
+
+### Pièges vécus (version 7, Xiaomi Android 14)
+
+- **Pas d'espace clone (multi-bureau) sur le téléphone de test.** Un second Chrome (XSpace, utilisateur 999) fait apparaître le sélecteur « Ouvrir avec » au lancement : l'app se ferme dès qu'il disparaît. Vérifier `adb shell pm list users`. Ne supprimer l'espace qu'avec l'accord de l'utilisateur (ses apps et données partent avec).
+- **Le navigateur est choisi par le code, pas par Android.** `tools/twa.sh` ajoute après `bubblewrap update` une redéfinition de `createTwaLauncher()` (`new TwaLauncher(this, "com.android.chrome")`, classe `com.google.androidbrowserhelper.trusted.LauncherActivity`). `getProviderPackage()` n'existe pas dans la bibliothèque 2.7.4 : ne pas l'utiliser.
+- **Une APK signée avec la clé d'upload ne se met pas par-dessus l'app venue de Google Play** (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) : désinstaller d'abord.
+- **Vérifier le lien : `adb shell pm get-app-links io.github.davidnurdin.antiriad_php`** doit afficher `jumphp.net: verified` et la clé Play. Le fichier `https://jumphp.net/.well-known/assetlinks.json` contient les deux empreintes (clé d'upload et clé Play).
+- Diagnostic : `adb logcat -d -v time | grep -E "TwaLauncher|ResolverActivity|Abort background"`. Un `ResolverActivity` après « Launching Trusted Web Activity » = le lancement a été détourné ; « Abort background activity starts » = l'app a été fermée par Android.
+
+Voir aussi `games/antiriad-php/PUBLISHING.md` (le pas-à-pas Play Console, les clés, les commandes).
+

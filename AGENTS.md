@@ -909,6 +909,8 @@ Then:
 - the Play Console is the user's (their developer account): list the steps (create the app with the same
   package, internal testing with the .aab, then **add Google Play's app signing fingerprint** with
   `update_project` too, store listing with `bin/jumphp shot` screenshots);
+- **Téléphone de test : pas d'espace clone (multi-bureau).** Un second Chrome dans un espace clone fait apparaître « Ouvrir avec » au lancement, et l'app se ferme. Vérifier `adb shell pm list users` ; ne jamais supprimer un espace sans l'accord de l'utilisateur (ses données partent avec).
+- **Le navigateur est forcé par `tools/twa.sh`** (`createTwaLauncher()` → `com.android.chrome`). Pièges, diagnostic adb et ordre de soumission : `docs/android.md` et `games/<id>/PUBLISHING.md` (exemple : games/antiriad-php).
 - a new version of the app (name, icon): `bin/jumphp twa <id>` again (versionCode + 1). The game itself updates
   with the site, no new app needed.
 

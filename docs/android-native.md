@@ -35,7 +35,7 @@ On a phone: `adb install games/<game>/dist/android-native/<game>-1.0.apk` (or se
 
 | Part | Where |
 |---|---|
-| PHP 8.5 (embed SAPI, static) with php-sdl, sdl_image, sdl_mixer, sdl_ttf, PHP-OpenGL, PHP-OpenAL, gd (PNG), bcmath, mbstring, phar, sockets, zlib | cross-built with the NDK: `tools/android/build.sh`, the extensions' `tools/android/ext/*.m4` |
+| PHP 8.5 (embed SAPI, static) with php-sdl, sdl_image, sdl_mixer, sdl_ttf, PHP-OpenGL, PHP-OpenAL, gd (PNG), bcmath, openssl, mbstring, phar, sockets, zlib | cross-built with the NDK: `tools/android/build.sh`, the extensions' `tools/android/ext/*.m4` |
 | SDL2 (its Java activity, OpenGL ES, touch, sound), SDL2_image / _mixer / _ttf, OpenAL Soft (OpenSL ES) | SDL's Android project, `tools/android/project` (Gradle, CMake) |
 | `libmain.so`: unpacks the game on its first launch (each new version once, from the APK into the private storage), runs it | `tools/android/project/app/jni/src/main.c` |
 | the game: `assets/game.tar` (as `export:standalone` packs it: `tools/stage-game.sh`) | |
@@ -48,7 +48,8 @@ The engine knows it is on a phone: `JUMPHP_MOBILE` (Platform::isMobile()), `JUMP
 controls are on (`JUMPHP_TOUCH_CONTROLS`; game.yaml `touch:` as in the browser: `pad: stick`, `a`, `b`, `start`,
 `select`, `labels`). On the desktop, `JUMPHP_TOUCH_CONTROLS=1 bin/jumphp run <game>` shows them (with the mouse).
 
-Not yet in the app: HTTPS (curl / OpenSSL): `$engine->http()` and the online games do not work on Android yet.
+HTTPS (`$engine->http()`, online play over `wss://`): PHP's openssl (OpenSSL 3, built with the NDK) with the game's CA
+certificates (`cacert.pem`, put in by `tools/stage-game.sh`; `openssl.cafile` set by main.c).
 
 ## On Google Play
 

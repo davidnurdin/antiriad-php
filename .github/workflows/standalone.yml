@@ -31,11 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t jumphp/standalone:dev docker/standalone
-      - name: StaticPHP (glibc 2.17)
+      - name: StaticPHP (any x86_64, glibc 2.17: docker/standalone/spc-target)
         run: |
           mkdir -p out
           docker run --rm -v "$PWD:/workspace:ro" -v "$PWD/out:/out" \
-            -e SPC_TARGET=native-native-gnu.2.17 -e SPC_REGISTRIES=/workspace/docker/standalone/registry/spc.registry.yml \
+            -e SPC_TARGET="$(cat docker/standalone/spc-target)" -e SPC_REGISTRIES=/workspace/docker/standalone/registry/spc.registry.yml \
             jumphp/standalone:dev sh -c 'printf "php-version: ${{ needs.key.outputs.php }}\nextensions: %s\nsapi:\n  - micro\n" "$(cat /workspace/tools/standalone-extensions.txt)" > craft.yml && spc craft && cp buildroot/bin/micro.sfx /out/micro-linux-x86_64.sfx || { cp -r log /out/log; exit 1; }'
       - if: failure()
         uses: actions/upload-artifact@v4

@@ -80,6 +80,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="android-$GAME-${{ inputs.version_name }}-${{ inputs.version_code }}"
-          gh release create "$tag" games/$GAME/dist/android-native/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          gh release create "$tag" games/$GAME/dist/android-native/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
             --title "$GAME ${{ inputs.version_name }} (Android, version ${{ inputs.version_code }})" \
             --notes "The native Android app of $GAME: .apk for a phone, .aab for Google Play (docs: JumPHP's docs/android-native.md)."

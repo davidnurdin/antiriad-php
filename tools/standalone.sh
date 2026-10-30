@@ -35,7 +35,8 @@ if [ ! -s "$micro" ]; then
   say "PHP $PHP_VERSION with SDL, OpenGL, OpenAL, built here (StaticPHP: ~15 min the first time, then kept)"
   for dir in downloads source buildroot pkgroot log; do mkdir -p "/cache/spc/$dir"; rm -rf "/opt/spc/$dir"; ln -s "/cache/spc/$dir" "/opt/spc/$dir"; done
   printf 'php-version: %s\nextensions: %s\nsapi:\n  - micro\n' "$PHP_VERSION" "$(cat /workspace/tools/standalone-extensions.txt)" > /opt/spc/craft.yml
-  (cd /opt/spc && SPC_TARGET=native-native-gnu.2.17 SPC_REGISTRIES=/workspace/docker/standalone/registry/spc.registry.yml spc craft) \
+  # docker/standalone/spc-target: Zig's target, any x86_64 (not "native": the building machine's processor) and glibc 2.17
+  (cd /opt/spc && SPC_TARGET="$(cat /workspace/docker/standalone/spc-target)" SPC_REGISTRIES=/workspace/docker/standalone/registry/spc.registry.yml spc craft) \
     || die "StaticPHP failed: its logs are in ~/.jumphp/standalone/spc/log"
   cp /opt/spc/buildroot/bin/micro.sfx "$micro"
 fi

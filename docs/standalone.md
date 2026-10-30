@@ -15,13 +15,17 @@ bin/jumphp export:standalone pong --linux --windows
 | Part | What | Where it comes from |
 |---|---|---|
 | PHP | [StaticPHP](https://github.com/crazywhalecc/static-php-cli)'s **micro**: PHP 8.5 as one executable that runs the PHAR appended to it | built once per set of extensions (below) |
-| the extensions | php-sdl, sdl_image, sdl_mixer, sdl_ttf, PHP-OpenGL (with JumPHP's patch), PHP-OpenAL, gd, zip, mbstring, bcmath, sockets… | JumPHP's StaticPHP registry: `docker/standalone/registry` |
+| the extensions | php-sdl, sdl_image, sdl_mixer, sdl_ttf, PHP-OpenGL (with JumPHP's patch), PHP-OpenAL, gd, zip, openssl, mbstring, bcmath, sockets… | JumPHP's StaticPHP registry: `docker/standalone/registry` |
 | the libraries | SDL2, SDL2_image (PNG/JPG/GIF/BMP), SDL2_mixer (WAV, OGG, MP3, FLAC), SDL2_ttf (FreeType inside), OpenAL Soft: static | same |
 | the game | `games/<game>` with its `vendor/` (the engine), as a PHAR; not `var/`, `dist/`, `tests/`, `site/` | `tools/standalone.sh` |
 
 On Linux the executable needs glibc 2.17 or newer (any Linux since 2013: built with Zig's toolchain) and loads
 the display (X11, or XWayland), OpenGL and the sound (PulseAudio/PipeWire, ALSA) from the player's system when
 the game starts, as every Linux game does. On Windows nothing is needed (Windows 10 or newer).
+
+HTTPS (`$engine->http()`, online play over `wss://`): PHP's openssl is inside; its CA certificates are the Linux
+system's (Debian / Ubuntu / Arch, Fedora / openSUSE), else the game's own `cacert.pem` (Windows, the others), through
+`SSL_CERT_FILE` (`tools/standalone-stub.php`).
 
 ## When the player runs it
 

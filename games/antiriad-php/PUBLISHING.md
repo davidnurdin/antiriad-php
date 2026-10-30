@@ -9,7 +9,7 @@ Les règles générales du moteur sont dans `AGENTS.md` (racine du dépôt) et `
 |---|---|---|
 | Web (jeu jouable) | https://jumphp.net/antiriad-php/ (redirige vers /antiriad-php/jouer) | le playground publie `games/antiriad-php/` à chaque push sur `main` |
 | Page du jeu (site) | https://jumphp.net/antiriad-php/ | `games/antiriad-php/site/index.html` |
-| Confidentialité | https://jumphp.net/antiriad-php/#confidentialite | section de `site/index.html` (pas de page séparée : le playground ne sert que `index.html`) |
+| Confidentialité | https://github.com/davidnurdin/antiriad-php/blob/main/games/antiriad-php/PRIVACY.md | fichier `PRIVACY.md` (le playground ne sert pas `site/index.html`) |
 | App Android | `io.github.davidnurdin.antiriad_php` | Trusted Web Activity (TWA) qui ouvre le jeu dans Chrome plein écran |
 | Google Play | Play Console, compte Duch'Inc. (développeur 4621944160072167336), appli 4972338030688135653 | piste interne puis production |
 
@@ -75,7 +75,7 @@ Pièges rencontrés :
 
 - Commit dans `main` puis `git push` : le playground publie tout seul après le push, mais **pas toujours** (un `sync_project` a déjà répondu « unchanged » alors qu'il avait publié). Vérifier avec `get_project` (`published_commit`) ou `curl -sL https://jumphp.net/antiriad-php/ | grep <texte>`.
 - Appeler `sync_project` (MCP `jumphp`) après le push si le texte attendu n'apparaît pas.
-- `site/index.html` contient la section « confidentialité » (`id="confidentialite"`). `site/privacy.html` n'est pas servi (404) : ne pas s'y fier.
+- `site/index.html` contient une section « confidentialité » (`id="confidentialite"`) que le playground ne sert pas. La source de la politique est `PRIVACY.md`. `site/privacy.html` renvoie 404 : ne pas s'y fier.
 
 ## 7. Le problème du lancement (et sa solution)
 

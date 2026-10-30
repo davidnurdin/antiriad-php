@@ -114,3 +114,18 @@ Pour vérifier une classe de la bibliothèque : `javap -p -cp <classes> <classe>
 - Ne pas envoyer en production sans confirmation explicite de l'utilisateur pour CET envoi.
 - Ne jamais mettre dans git : les clés, les mots de passe, le contenu de `dist/`, `var/`, les captures de débogage, les jetons MCP.
 - Ne pas `pm remove-user` ni `adb uninstall` sans demander (perte de données).
+
+## 9. Mettre à jour l'appli (prochaine version)
+
+Pas de script séparé : c'est la même commande que la première fois. Le jeu lui-même se met à jour sans nouvelle appli (il est chargé depuis le site) ; une nouvelle version Android n'est nécessaire que si le nom, l'icône, le paquet ou l'URL de départ changent.
+
+1. **Clés (indispensables)** : `~/.jumphp/android/keys/io.github.davidnurdin.antiriad_php.keystore` et `.env`. Sans elles, `bin/jumphp twa` en crée de nouvelles, et Google Play refuse la mise à jour (clé d'upload différente). Les sauvegarder hors de cette machine. Le SDK Android est dans `~/.jumphp/android-sdk` (licence déjà acceptée, pas besoin de `ACCEPT_LICENSE`).
+2. **Construire** :
+   ```bash
+   bin/jumphp twa antiriad-php --url https://jumphp.net/antiriad-php/ --package io.github.davidnurdin.antiriad_php
+   ```
+   Le numéro de version augmente seul (`appVersionCode` 7 → 8…), sauf avec `--same-version`. Le script réapplique le correctif de lancement (`createTwaLauncher`).
+3. **Committer** `games/antiriad-php/android/twa-manifest.json` (le nouveau numéro de version doit être dans git). Ne jamais committer `dist/`.
+4. **Vérifier sur téléphone** : `adb install -r` si l'APK est signée avec la même clé que la version installée (sinon désinstaller d'abord), puis les commandes du §4.
+5. **Publier** : Play Console › piste de production (ou interne) › Créer une release › `dist/android/antiriad-php-<version>.aab` › notes `<fr-FR>` › pays › « Envoyer pour examen ».
+6. **Site** : rien à faire pour le jeu ; le playground publie `games/antiriad-php/` au push sur `main`. Vérifier avec `curl -sL https://jumphp.net/antiriad-php/ -o /dev/null -w "%{http_code}"`.

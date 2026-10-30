@@ -16,13 +16,15 @@ class sdl extends PhpExtensionPackage
 {
     #[BeforeStage('php', [php::class, 'buildconfForUnix'], 'ext-sdl')]
     #[BeforeStage('php', [php::class, 'buildconfForWindows'], 'ext-sdl')]
-    #[PatchDescription('php-sdl on PHP 8.5: zend_ce_exception')]
+    #[PatchDescription('php-sdl on PHP 8.5: zend_ce_exception; no SDLCALL before a call')]
     public function patchForPhp85(): void
     {
         foreach (glob("{$this->getSourceDir()}/src/*.[ch]") ?: [] as $file) {
             $code = (string)file_get_contents($file);
-            if (str_contains($code, 'zend_exception_get_default()')) {
-                file_put_contents($file, str_replace('zend_exception_get_default()', 'zend_ce_exception', $code));
+            // + `= SDLCALL SDL_SaveBMP_RW(...)`: a calling convention before a call (__cdecl on Windows: MSVC refuses it)
+            $fixed = str_replace(['zend_exception_get_default()', '= SDLCALL SDL_'], ['zend_ce_exception', '= SDL_'], $code);
+            if ($fixed !== $code) {
+                file_put_contents($file, $fixed);
             }
         }
         // PHP's list of built-in extensions includes the ext/<name>/*.h that name phpext_ (build/print_include.awk):

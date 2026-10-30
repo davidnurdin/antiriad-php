@@ -15,15 +15,29 @@ bundle.
 
 ## Without PHP at run time: illegalstudio (to study)
 
-Try a flag (e.g. `bin/jumphp export:standalone <game> --no-php`, and the same for the native apps) that builds the
-game with the tools of [illegalstudio](https://github.com/illegalstudio/) instead of embedding PHP. Not looked at
-yet:
+Try a flag (e.g. `bin/jumphp export:standalone <game> --native`) that builds the game with
+[elephc](https://github.com/illegalstudio/elephc) (illegalstudio) instead of embedding PHP: a compiler of a static
+subset of PHP to native code, no Zend Engine (from its README, nothing tried yet).
 
-- which of its projects fits, and what it does with PHP code (compiled to native code, or another runtime)
-- whether it handles what a JumPHP game needs: the engine's code, the extensions (SDL, OpenGL, OpenAL, gd,
-  openssl), closures, ReactPHP's event loop, Composer's autoload
-- on which platforms (Linux, Windows, Android, iOS), the size and speed against the micro / embed PHP
-- if only part of it works: as an option, PHP stays the default
+What helps:
+- modern PHP: classes, interfaces, traits, enums, closures, generators, namespaces, Fibers, Composer's autoload
+  resolved when compiling; GD inside; C libraries through `extern` (its DOOM showcase: a game in compiled PHP)
+- probably much faster than the interpreter, and a smaller executable
+
+What blocks or needs work:
+- platforms: executables for Linux x86_64 / ARM64 and macOS ARM64, static libraries for iOS; no Windows, no
+  Android. So a variant for Linux (and maybe a lead for the iPhone app), not a replacement of PHP
+- JumPHP's extensions do not exist there (php-sdl, PHP-OpenGL, PHP-OpenAL): the ~70 SDL / Mix / TTF / IMG functions
+  the engine calls, and the GL / AL ones, declared again as `extern` with the same names (the engine barely
+  changes); its C callbacks take no strings yet
+- the engine's dynamic PHP: Symfony DependencyInjection (Reflection, autowiring: a container generated beforehand
+  as plain PHP), laravel/serializable-closure (the worker threads: left out in this mode), `new $class()` for the
+  scenes and ReactPHP to check
+- the players' games are written freely (often by Claude): some will not compile, so the flag tries, falls back to
+  PHP and says what blocked
+
+First step: Pong or hello-world compiled by elephc on Linux, to see what passes and the speed gained. PHP stays
+the default (Windows, Android).
 
 ## Cleaning
 

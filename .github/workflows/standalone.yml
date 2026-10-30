@@ -1,0 +1,103 @@
+# The micro binaries of bin/jumphp export:standalone (PHP + SDL, OpenGL, OpenAL), built by StaticPHP with JumPHP's
+# registry (docker/standalone) for Linux and Windows, published as the release standalone-<key>
+# (tools/standalone-key.sh): export:standalone downloads them from there. Windows' can only be built on Windows
+# (Visual Studio): here. Run by hand (Actions > standalone > Run workflow), after a change of docker/standalone.
+name: standalone
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  key:
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      spc: ${{ steps.key.outputs.spc }}
+      php: ${{ steps.key.outputs.php }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: key
+        run: |
+          echo "key=$(bash tools/standalone-key.sh | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          echo "spc=$(sed -nE 's/^ARG SPC_REF=(.+)/\1/p' docker/standalone/Dockerfile)" >> "$GITHUB_OUTPUT"
+          echo "php=8.5" >> "$GITHUB_OUTPUT"
+
+  linux:
+    needs: key
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t jumphp/standalone:dev docker/standalone
+      - name: StaticPHP (glibc 2.17)
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD:/workspace:ro" -v "$PWD/out:/out" \
+            -e SPC_TARGET=native-native-gnu.2.17 -e SPC_REGISTRIES=/workspace/docker/standalone/registry/spc.registry.yml \
+            jumphp/standalone:dev sh -c 'printf "php-version: ${{ needs.key.outputs.php }}\nextensions: %s\nsapi:\n  - micro\n" "$(cat /workspace/tools/standalone-extensions.txt)" > craft.yml && spc craft && cp buildroot/bin/micro.sfx /out/micro-linux-x86_64.sfx || { cp -r log /out/log; exit 1; }'
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-linux
+          path: out/log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: micro-linux-x86_64
+          path: out/micro-linux-x86_64.sfx
+
+  windows:
+    needs: key
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: jumphp
+      - name: StaticPHP
+        shell: pwsh
+        run: |
+          git clone -q https://github.com/crazywhalecc/static-php-cli.git spc
+          git -C spc checkout -q ${{ needs.key.outputs.spc }}
+          cd spc
+          composer install -q --no-dev --no-interaction
+          php ../jumphp/docker/standalone/spc-registries.php
+      - name: Build (Visual Studio 2022)
+        shell: pwsh
+        working-directory: spc
+        env:
+          SPC_REGISTRIES: ${{ github.workspace }}\jumphp\docker\standalone\registry\spc.registry.yml
+        run: |
+          # no pcntl / posix on Windows
+          $ext = ((Get-Content ../jumphp/tools/standalone-extensions.txt).Trim() -split ',' | Where-Object { $_ -notin 'pcntl','posix' }) -join ','
+          "php-version: ${{ needs.key.outputs.php }}`nextensions: $ext`nsapi:`n  - micro`n" | Set-Content craft.yml
+          ./bin/spc doctor --auto-fix
+          ./bin/spc craft
+          New-Item -ItemType Directory -Force ../out | Out-Null
+          Copy-Item buildroot/bin/micro.sfx ../out/micro-windows-x86_64.sfx
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-windows
+          path: spc/log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: micro-windows-x86_64
+          path: out/micro-windows-x86_64.sfx
+
+  release:
+    needs: [key, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: micro-*
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="standalone-${{ needs.key.outputs.key }}"
+          gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$tag" -R "$GITHUB_REPOSITORY" --prerelease --title "Standalone micro $tag" \
+                 --notes "PHP ${{ needs.key.outputs.php }} (micro) with JumPHP's extensions, for bin/jumphp export:standalone."
+          gh release upload "$tag" micro-*.sfx -R "$GITHUB_REPOSITORY" --clobber

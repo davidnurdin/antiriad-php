@@ -61,6 +61,9 @@ Games (<game> = a folder of games/, e.g. pong)
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
                             (serve / webshot: JUMPHP_WEB=remote uses dist/remote, JUMPHP_WEB=site dist/site)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
+  export:standalone <game> [--linux] [--windows]
+                            the game as one executable, nothing to install (PHP, SDL, OpenGL, OpenAL inside):
+                            dist/standalone/<game>-linux-x86_64 and/or <game>-windows-x86_64.exe (docs/standalone.md)
   twa <game> [--url URL] [--package ID] [--name NAME] [--same-version]
                             the game as an Android app for Google Play (Trusted Web Activity, Bubblewrap):
                             dist/android/<game>-<v>.aab (Play) + .apk (a phone) + assetlinks.json (docs/android.md).
@@ -334,6 +337,38 @@ cmd_twa() {
     echo "  The key: $home/android/keys/$package.keystore (+ .env, its password): back them up; never in git."
     echo "  Next version: bin/jumphp twa $game (the version goes up by one; twa-manifest.json is in git)."
   } >&2
+}
+
+# the game as one executable (tools/standalone.sh in docker/standalone): StaticPHP's micro (PHP + SDL, OpenGL, OpenAL)
+# + the game as a PHAR. The micro binaries are kept in ~/.jumphp/standalone (downloaded from JumPHP's releases, or
+# built here for Linux: ~15 min once)
+cmd_export_standalone() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local targets=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --linux) targets+=(linux-x86_64) ;;
+      --windows) targets+=(windows-x86_64) ;;
+      *) die "unknown option $1 (--linux, --windows)" ;;
+    esac
+    shift
+  done
+  [ ${#targets[@]} -gt 0 ] || targets=(linux-x86_64)
+  ensure_vendor "$dir"
+  local home="${JUMPHP_HOME:-$HOME/.jumphp}" image="${JUMPHP_STANDALONE_IMAGE:-jumphp/standalone:dev}" target out log
+  mkdir -p "$home/standalone"
+  docker image inspect "$image" >/dev/null 2>&1 || { say "building $image (first time, ~3 min)"; docker build -t "$image" docker/standalone; }
+  for target in "${targets[@]}"; do
+    log="$(mktemp)"
+    docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" -v "$ROOT:/workspace" -v "$home/standalone:/cache" \
+      -e HOME=/tmp -e GAME="$game" -e TARGET="$target" -e JUMPHP_STANDALONE_PHP -e JUMPHP_STANDALONE_BUILD \
+      "$image" bash /workspace/tools/standalone.sh | tee "$log"
+    out="$(sed -n 's/^OUT=//p' "$log")"; rm -f "$log"
+    [ -n "$out" ] || die "no executable for $target (see above)"
+    say "done: ${out#/workspace/} ($(du -h "$ROOT/${out#/workspace/}" | cut -f1))"
+  done
+  echo "  One file to give: the player runs it (Linux: chmod +x first if it was downloaded). The first launch unpacks" >&2
+  echo "  the game in the player's cache; saves and options go to their data folder (docs/standalone.md)." >&2
 }
 
 # the `jumphp` command for the whole system (tools/jumphp-cli): `jumphp test pong` from any folder of a project,
@@ -791,6 +826,7 @@ main() {
     webshot) cmd_webshot "$@" ;;
     relay) cmd_relay "$@" ;;
     export:desktop) cmd_export_desktop "$@" ;;
+    export:standalone) cmd_export_standalone "$@" ;;
     twa) cmd_twa "$@" ;;
     deploy) cmd_deploy "$@" ;;
     pages) cmd_pages "$@" ;;

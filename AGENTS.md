@@ -133,6 +133,7 @@ games/<id>/
 | `bin/jumphp webshot <id> [seconds] [keys]` | headless Chrome: loads the browser build, presses keys, screenshot `dist/webshot.png`, fails on JS / PHP errors |
 | `bin/jumphp relay up\|down\|logs` | multiplayer relay server on `ws://localhost:8090/ws` |
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
+| `bin/jumphp export:standalone <id> [--linux] [--windows]` | the game as one executable for players (dist/standalone/; docs/standalone.md) |
 | `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP), a game with its own web site (`games/<id>/site/index.html`) gets it at the root and the game in `/play/` (`{{DOMAIN}}` replaced in its pages), then checks that `https://<domain>/` answers (shows the server logs if not). Behind a Traefik already on the server: `bin/jumphp server:traefik` prints its entry points and resolver (`JUMPHP_SERVER_MODE` `traefik-external`, or `traefik-passthrough` when it has no working resolver). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
 | `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
 | `bin/jumphp cli:install` / `cli:uninstall` | the `jumphp` command for the whole system (`~/.local/bin/jumphp`, `tools/jumphp-cli`): `jumphp <command>` from any folder of a project, `jumphp new <folder>`, and once a day a question when Packagist has a newer JumPHP (`bin/jumphp update` on a yes) |
@@ -890,6 +891,17 @@ What the playground publishes and how:
   needed. (The user can also do it in Studio → the project → "Fichiers privés".);
 - a game without a picture of its own is photographed by the playground (its screen, in a browser);
 - never put the MCP token or any secret in the repository.
+
+### One executable (Linux, Windows)
+
+When the user wants to give the game to players with nothing installed ("an executable", "a .exe", "a binary"):
+`bin/jumphp export:standalone <id>` (Linux; `--windows` for Windows, `--linux --windows` for both) makes
+`games/<id>/dist/standalone/<id>-linux-x86_64` / `<id>-windows-x86_64.exe`: StaticPHP's micro (PHP 8.5 with
+SDL, OpenGL, OpenAL built in) + the game as a PHAR, unpacked into the player's cache on the first launch; saves go
+to the player's data folder (docs/standalone.md). The micro is downloaded from JumPHP's releases or built once
+in Docker (Linux, ~15 min: run it in the background); Windows' only comes from the releases (the GitHub workflow
+`standalone`): if it is missing, say so, do not try to build it. Check the Linux one runs: `SDL_VIDEODRIVER=dummy
+SDL_AUDIODRIVER=dummy timeout 5 <file>` exits by the timeout, not with an error. dist/ is not in git.
 
 ### Android app (Google Play)
 

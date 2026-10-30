@@ -1,0 +1,39 @@
+<?php
+
+declare(strict_types=1);
+
+namespace JumPHP\Standalone\Extension;
+
+use Package\Target\php;
+use StaticPHP\Attribute\Package\BeforeStage;
+use StaticPHP\Attribute\Package\Extension;
+use StaticPHP\Attribute\PatchDescription;
+use StaticPHP\Package\PhpExtensionPackage;
+
+/** php-sdl: zend_exception_get_default() is gone since PHP 8.5 (as in docker/desktop and docker/engine-wasm). */
+#[Extension('sdl')]
+class sdl extends PhpExtensionPackage
+{
+    #[BeforeStage('php', [php::class, 'buildconfForUnix'], 'ext-sdl')]
+    #[BeforeStage('php', [php::class, 'buildconfForWindows'], 'ext-sdl')]
+    #[PatchDescription('php-sdl on PHP 8.5: zend_ce_exception')]
+    public function patchForPhp85(): void
+    {
+        foreach (glob("{$this->getSourceDir()}/src/*.[ch]") ?: [] as $file) {
+            $code = (string)file_get_contents($file);
+            if (str_contains($code, 'zend_exception_get_default()')) {
+                file_put_contents($file, str_replace('zend_exception_get_default()', 'zend_ce_exception', $code));
+            }
+        }
+        // PHP's list of built-in extensions includes the ext/<name>/*.h that name phpext_ (build/print_include.awk):
+        // php-sdl's is in src/
+        file_put_contents("{$this->getSourceDir()}/php_sdl.h", "/* phpext_sdl_ptr */\n#include \"src/php_sdl.h\"\n");
+    }
+
+    #[BeforeStage('php', [php::class, 'buildconfForWindows'], 'ext-sdl')]
+    #[PatchDescription('php-sdl on Windows: its config.w32 (registry/w32)')]
+    public function configW32(): void
+    {
+        jumphp_config_w32('sdl', $this->getSourceDir());
+    }
+}

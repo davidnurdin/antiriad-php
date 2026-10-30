@@ -138,6 +138,7 @@ casse-briques `games/breakout` a été écrit ainsi, par une IA qui n'avait lu q
 | `webshot <jeu>` | teste la version navigateur dans un Chrome sans écran |
 | `relay up\|down\|logs` | serveur multijoueur sur `ws://localhost:8090/ws` |
 | `export:desktop <jeu>` | une image Docker qui lance le jeu |
+| `export:standalone <jeu> [--linux] [--windows]` | le jeu en un seul exécutable, rien à installer (PHP, SDL, OpenGL, OpenAL dedans), voir [docs/standalone.md](docs/standalone.md) |
 | `deploy:setup` / `deploy [jeux...]` | configure / déploie sur ton serveur (FrankenPHP seul ou avec Traefik, HTTPS Let's Encrypt) ; sans serveur : rsync vers `JUMPHP_DEPLOY_TARGET` |
 | `server:setup` / `server:logs` | installe Docker sur le serveur / journaux du serveur web |
 | `github` | met le projet sur GitHub (`gh`), et en option sur GitHub Pages |
@@ -330,6 +331,7 @@ breaker was written that way, by an AI that had only read this file.
 | `webshot <game>` | tests the browser build in headless Chrome |
 | `relay up\|down\|logs` | multiplayer server on `ws://localhost:8090/ws` |
 | `export:desktop <game>` | a Docker image that runs the game |
+| `export:standalone <game> [--linux] [--windows]` | the game as one executable, nothing to install (PHP, SDL, OpenGL, OpenAL inside), see [docs/standalone.md](docs/standalone.md) |
 | `deploy:setup` / `deploy [games...]` | sets up / deploys to your server (FrankenPHP alone or with Traefik, Let's Encrypt HTTPS); without a server: rsync to `JUMPHP_DEPLOY_TARGET` |
 | `server:setup` / `server:logs` | installs Docker on the server / web server logs |
 | `github` | puts the project on GitHub (`gh`), optionally on GitHub Pages |

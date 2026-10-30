@@ -1,0 +1,7 @@
+ARG_WITH('opengl', 'OpenGL (JumPHP)', 'no');
+if (PHP_OPENGL != 'no') {
+    jumphp_libs('opengl', ['opengl32.lib', 'gdi32.lib']);
+    // OpenGL 1.2+ from SDL at run time: jumphp_glproc.h (registry/functions.php)
+    EXTENSION('opengl', 'php_convert.c php_opengl.c', PHP_OPENGL_SHARED, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+    jumphp_includes('opengl');
+}

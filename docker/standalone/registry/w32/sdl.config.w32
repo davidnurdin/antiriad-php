@@ -1,0 +1,11 @@
+ARG_ENABLE('sdl', 'SDL2 (JumPHP)', 'no');
+if (PHP_SDL != 'no') {
+    jumphp_libs('sdl', ['SDL2-static.lib;SDL2.lib'].concat(JUMPHP_SDL_SYSTEM_LIBS));
+    EXTENSION('sdl', 'src/blendmode.c src/cpuinfo.c src/error.c src/event.c src/filesystem.c src/glcontext.c ' +
+        'src/joystick.c src/keyboard.c src/messagebox.c src/mouse.c src/mutex.c src/php_sdl.c src/pixels.c ' +
+        'src/platform.c src/power.c src/rect.c src/render.c src/rwops.c src/sdl.c src/shape.c src/surface.c ' +
+        'src/timer.c src/version.c src/video.c src/window.c', PHP_SDL_SHARED, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+    jumphp_includes('sdl');
+    AC_DEFINE('HAVE_SDL2', 1);
+    AC_DEFINE('HAVE_SDL_GETREVISIONNUMBER', 1);
+}

@@ -220,8 +220,12 @@ static const char *BOOT =
     "require \"$root/vendor/autoload.php\";\n"
     "exit(JumPHP\\Kernel\\Application::boot($root)->run());\n";
 
-/* PHP's settings before it starts: opcache's lock file in the app's own temp folder (there is no /tmp) */
-static char tmp_dir[1024];
+/*
+ * PHP's settings before it starts: opcache's lock file in the app's own temp folder (there is no /tmp); HTTPS's CA
+ * certificates, the game's (tools/stage-game.sh): Android's own are not in OpenSSL's format, and OpenSSL reads no
+ * SSL_CERT_FILE in an app (a process started by the zygote counts as setuid)
+ */
+static char tmp_dir[1024], ca_file[1100];
 
 static void ini_set_default(HashTable *ini, const char *name, const char *value)
 {
@@ -235,6 +239,7 @@ static void ini_defaults(HashTable *ini)
     ini_set_default(ini, "opcache.lockfile_path", tmp_dir);
     ini_set_default(ini, "memory_limit", "1G");
     ini_set_default(ini, "sys_temp_dir", tmp_dir);
+    ini_set_default(ini, "openssl.cafile", ca_file);
     ini_set_default(ini, "error_reporting", "32767"); /* E_ALL */
 }
 
@@ -274,6 +279,7 @@ int main(int argc, char *argv[])
     setenv("TMPDIR", tmp, 1);
 
     snprintf(tmp_dir, sizeof tmp_dir, "%s", tmp);
+    snprintf(ca_file, sizeof ca_file, "%s/cacert.pem", root);
     php_embed_module.ini_defaults = ini_defaults;
     PHP_EMBED_START_BLOCK(1, php_argv)
         /* the request has started (as php_execute_script says): errors are the script's, not the startup's */

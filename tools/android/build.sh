@@ -20,6 +20,7 @@ NDK_VERSION="${NDK_VERSION:-29.0.14206865}"
 API=26
 PHP_VERSION=8.5.12
 LIBPNG_VERSION=1.6.59 # as StaticPHP's (GD's PNG)
+OPENSSL_VERSION=3.6.5 # as StaticPHP's (HTTPS: https:// and wss://)
 NDK="$ANDROID_HOME/ndk/$NDK_VERSION"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 ABIS="${ABIS:-arm64-v8a x86_64}"
@@ -58,6 +59,7 @@ fetch() {
 sources() {
   fetch php "https://www.php.net/distributions/php-$PHP_VERSION.tar.xz"
   fetch libpng "https://github.com/pnggroup/libpng/archive/refs/tags/v$LIBPNG_VERSION.tar.gz"
+  fetch openssl "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
   for lib in sdl2 sdl2_image sdl2_mixer sdl2_ttf openal; do fetch "$lib" "$(registry_url "$lib")"; done
   for ext in sdl sdl_image sdl_mixer sdl_ttf opengl openal; do fetch "ext-$ext" "$(registry_url "ext-$ext")"; done
 
@@ -105,7 +107,7 @@ build_php() {
     *) die "unknown ABI $abi" ;;
   esac
   # the key: what makes PHP (versions, the extensions' config.m4, the functions php_tree and build_php themselves)
-  local key; key="$( { echo "$PHP_VERSION $NDK_VERSION $API $LIBPNG_VERSION"; cat "$HERE"/ext/*.m4 /workspace/docker/ext/php-opengl.patch \
+  local key; key="$( { echo "$PHP_VERSION $NDK_VERSION $API $LIBPNG_VERSION $OPENSSL_VERSION"; cat "$HERE"/ext/*.m4 /workspace/docker/ext/php-opengl.patch \
     "$REGISTRY/functions.php"; declare -f php_tree build_php; } | sha256sum | cut -c1-12)"
   local out="/cache/php/$abi-$key"
   [ -f "$out/lib/libphp.a" ] && { ln -sfn "$(basename "$out")" "/cache/php/$abi"; return 0; }
@@ -119,6 +121,15 @@ build_php() {
     -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_FRAMEWORK=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     > "$build/libpng.out" 2>&1 && cmake --build "$build/libpng" --target install >> "$build/libpng.out" 2>&1 \
     || { tail -30 "$build/libpng.out"; die "libpng failed to build for $abi"; }
+  # OpenSSL (PHP's openssl: https:// and wss://), static, into PHP's prefix as libpng
+  local ossl_target=android-arm64; [ "$abi" = x86_64 ] && ossl_target=android-x86_64
+  rm -rf "$build/openssl" && cp -r "$SRC/openssl" "$build/openssl"
+  (
+    cd "$build/openssl"
+    export ANDROID_NDK_ROOT="$NDK" PATH="$TOOLCHAIN/bin:$PATH"
+    ./Configure "$ossl_target" -D__ANDROID_API__="$API" --prefix="$out" --libdir=lib no-shared no-tests no-docs \
+      no-apps no-module && make -j"$(nproc)" build_libs && make install_dev
+  ) > "$build/openssl.out" 2>&1 || { tail -30 "$build/openssl.out"; die "OpenSSL failed to build for $abi"; }
   (
     cd "$build"
     export CC="$TOOLCHAIN/bin/$target$API-clang" CXX="$TOOLCHAIN/bin/$target$API-clang++"
@@ -130,10 +141,11 @@ build_php() {
     # zlib: the NDK's (no .pc); pkg-config never sees the image's own (Linux) libraries
     export ZLIB_CFLAGS="-I$TOOLCHAIN/sysroot/usr/include" ZLIB_LIBS="-lz" PKG_CONFIG_LIBDIR=/nonexistent
     export PNG_CFLAGS="-I$out/include" PNG_LIBS="-L$out/lib -lpng16 -lz"
+    export OPENSSL_CFLAGS="-I$out/include" OPENSSL_LIBS="-L$out/lib -lssl -lcrypto"
     ./configure --host="$target" --build=x86_64-pc-linux-gnu --prefix="$out" \
       --enable-embed=static --disable-cli --disable-cgi --disable-phpdbg --disable-fpm --without-pear \
       --disable-all --disable-opcache-jit --with-zlib --enable-ctype --enable-tokenizer --enable-filter \
-      --enable-mbstring --disable-mbregex --enable-sockets --enable-phar --enable-gd --enable-bcmath \
+      --enable-mbstring --disable-mbregex --enable-sockets --enable-phar --enable-gd --enable-bcmath --with-openssl \
       --enable-sdl --enable-sdl_image --enable-sdl_mixer --enable-sdl_ttf --enable-opengl --enable-openal \
       > "$build/configure.out" 2>&1 || { tail -30 "$build/configure.out"; die "PHP's configure failed for $abi"; }
     # bionic has the resolver's res_n* / dn_* in libc but no header for them: PHP's DNS functions (dns_get_record...)

@@ -52,6 +52,17 @@ if (!is_file("$root/.unpacked")) {
 if (getenv('JUMPHP_VAR') === false) {
     putenv("JUMPHP_VAR=$data");
 }
+// HTTPS: the computer's CA certificates (Debian / Ubuntu / Arch, Fedora / openSUSE), else the game's (Windows, the
+// others): PHP's OpenSSL is built in, it does not know where this system keeps them
+if (getenv('SSL_CERT_FILE') === false) {
+    $system = $windows ? [] : ['/etc/ssl/certs/ca-certificates.crt', '/etc/pki/tls/certs/ca-bundle.crt'];
+    foreach ([...$system, "$root/cacert.pem"] as $ca) {
+        if (is_file($ca)) {
+            putenv("SSL_CERT_FILE=$ca");
+            break;
+        }
+    }
+}
 chdir($root);
 require "$root/vendor/autoload.php";
 exit(JumPHP\Kernel\Application::boot($root)->run());

@@ -59,9 +59,9 @@ set(ALSOFT_BACKEND_OPENSL ON CACHE BOOL "" FORCE)
 set(ALSOFT_REQUIRE_OPENSL ON CACHE BOOL "" FORCE)
 add_subdirectory(${SRC}/openal openal)
 
-# libmain.so: SDL_main (main.c) + PHP and its extensions (GD's libpng beside libphp.a)
+# libmain.so: SDL_main (main.c) + PHP and its extensions (GD's libpng and OpenSSL beside libphp.a)
 add_library(main SHARED src/main.c)
 target_include_directories(main PRIVATE ${PHP}/include/php ${PHP}/include/php/main ${PHP}/include/php/Zend
     ${PHP}/include/php/TSRM ${PHP}/include/php/sapi/embed)
-target_link_libraries(main PRIVATE ${PHP}/lib/libphp.a ${PHP}/lib/libpng16.a SDL2_image::SDL2_image-static SDL2_mixer::SDL2_mixer-static
+target_link_libraries(main PRIVATE ${PHP}/lib/libphp.a ${PHP}/lib/libpng16.a ${PHP}/lib/libssl.a ${PHP}/lib/libcrypto.a SDL2_image::SDL2_image-static SDL2_mixer::SDL2_mixer-static
     SDL2_ttf::SDL2_ttf-static OpenAL::OpenAL SDL2::SDL2 log android z m dl OpenSLES)

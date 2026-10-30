@@ -251,7 +251,7 @@ class OpenGl extends EventEmitter
      */
     public function texture(string $path, bool $smooth = false, bool $repeat = false): int
     {
-        $file = str_starts_with($path, '/') ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
+        $file = \JumPHP\Kernel\Platform::isAbsolutePath($path) ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
         $data = @file_get_contents($file);
         $image = $data === false ? false : @imagecreatefromstring($data);
         if ($image === false) {

@@ -61,6 +61,10 @@ Games (<game> = a folder of games/, e.g. pong)
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
                             (serve / webshot: JUMPHP_WEB=remote uses dist/remote, JUMPHP_WEB=site dist/site)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
+  android <game> [--local] [--package ID] [--version-name X]
+                            the game as a native Android app (no browser: PHP, SDL, OpenGL ES, OpenAL inside), signed:
+                            built by GitHub Actions in your repository and published as a release (.apk + .aab for
+                            Google Play); --local: built here in Docker. docs/android-native.md
   export:standalone <game> [--linux] [--windows]
                             the game as one executable, nothing to install (PHP, SDL, OpenGL, OpenAL inside):
                             dist/standalone/<game>-linux-x86_64 and/or <game>-windows-x86_64.exe (docs/standalone.md)
@@ -337,6 +341,122 @@ cmd_twa() {
     echo "  The key: $home/android/keys/$package.keystore (+ .env, its password): back them up; never in git."
     echo "  Next version: bin/jumphp twa $game (the version goes up by one; twa-manifest.json is in git)."
   } >&2
+}
+
+# the game as a native Android app (tools/android/build.sh in docker/android-native): on GitHub (the workflow
+# .github/workflows/android.yml, from tools/android/workflow.yml; the release has the .apk and the .aab) or --local.
+# games/<game>/android/app.json (in git): package, version; the upload key: ~/.jumphp/android/keys (never in git).
+cmd_android() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local local_build=0 package="" version_name=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --local) local_build=1 ;;
+      --package) package="${2:-}"; shift ;;
+      --package=*) package="${1#*=}" ;;
+      --version-name) version_name="${2:-}"; shift ;;
+      --version-name=*) version_name="${1#*=}" ;;
+      *) die "unknown option $1" ;;
+    esac
+    shift
+  done
+  local state="$ROOT/$dir/android/app.json" code=0
+  mkdir -p "$ROOT/$dir/android"
+  if [ -f "$state" ]; then
+    [ -n "$package" ] || package="$(sed -nE 's/^ *"package": *"([^"]+)".*/\1/p' "$state")"
+    code="$(sed -nE 's/^ *"versionCode": *([0-9]+).*/\1/p' "$state")"
+    [ -n "$version_name" ] || version_name="$(sed -nE 's/^ *"versionName": *"([^"]+)".*/\1/p' "$state")"
+  fi
+  if [ -z "$package" ]; then
+    # the TWA's package if the game has one: the native app replaces it on Google Play (same package, same key)
+    package="$(sed -nE 's/^ *"packageId": *"([^"]+)".*/\1/p' "$ROOT/$dir/android/twa-manifest.json" 2>/dev/null)"
+    local owner suggestion
+    owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]-' '[:lower:]_')"
+    suggestion="${package:-io.github.${owner:-me}.$(echo "$game" | tr '-' '_')}"
+    if [ -t 0 ]; then
+      read -rp "The app's package on Google Play (never changes once published) [$suggestion]: " package
+    fi
+    package="${package:-$suggestion}"
+  fi
+  [[ "$package" =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]] || die "--package: like io.github.me.my_game (lower case, dots)"
+  code=$(( ${code:-0} + 1 ))
+  version_name="${version_name:-1.0}"
+  printf '{\n    "package": "%s",\n    "versionCode": %d,\n    "versionName": "%s"\n}\n' "$package" "$code" "$version_name" > "$state"
+
+  # the upload key (the TWA's if there is one): ~/.jumphp/android/keys/<package>.keystore + .env
+  local home="${JUMPHP_HOME:-$HOME/.jumphp}" image="${JUMPHP_ANDROID_IMAGE:-jumphp/android-native:dev}"
+  local keys="$home/android/keys"
+  mkdir -p "$keys" && chmod 700 "$keys"
+  docker image inspect "$image" >/dev/null 2>&1 || { say "building $image (first time, ~3 min)"; docker build -t "$image" docker/android-native; }
+  if [ ! -f "$keys/$package.keystore" ]; then
+    say "a new upload key: $keys/$package.keystore (back it up; never in git)"
+    local pass; pass="$(head -c 18 /dev/urandom | base64 | tr '+/' '-_')"
+    docker run --rm --user "$(id -u):$(id -g)" -v "$keys:/keys" "$image" keytool -genkeypair -keystore "/keys/$package.keystore" \
+      -storetype PKCS12 -alias upload -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=$package" \
+      -storepass "$pass" -keypass "$pass" >/dev/null 2>&1 || die "keytool failed"
+    printf 'BUBBLEWRAP_KEYSTORE_PASSWORD=%s\nBUBBLEWRAP_KEY_PASSWORD=%s\n' "$pass" "$pass" > "$keys/$package.env"
+    chmod 600 "$keys/$package.keystore" "$keys/$package.env"
+  fi
+  local store_pass key_pass
+  store_pass="$(sed -n 's/^BUBBLEWRAP_KEYSTORE_PASSWORD=//p' "$keys/$package.env")"
+  key_pass="$(sed -n 's/^BUBBLEWRAP_KEY_PASSWORD=//p' "$keys/$package.env")"
+
+  if [ "$local_build" = 1 ]; then
+    local sdk="$home/android-sdk"
+    [ -d "$sdk/ndk/29.0.14206865" ] || die "the Android SDK with its NDK is needed in $sdk: run bin/jumphp twa once (it installs the SDK after your yes to its license), then: $sdk/cmdline-tools/latest/bin/sdkmanager --install \"ndk;29.0.14206865\""
+    ensure_vendor "$dir"
+    mkdir -p "$home/android-native"
+    local log; log="$(mktemp)"
+    docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/workspace" -v "$home/android-native:/cache" \
+      -v "$sdk:/opt/android-sdk" -v "$keys:/keys:ro" -e GAME="$game" -e PACKAGE="$package" -e VERSION_CODE="$code" \
+      -e VERSION_NAME="$version_name" -e KEYSTORE="/keys/$package.keystore" -e KEYSTORE_PASSWORD="$store_pass" \
+      -e KEY_PASSWORD="$key_pass" -e KEY_ALIAS=upload -e ABIS="${JUMPHP_ANDROID_ABIS:-arm64-v8a x86_64}" \
+      "$image" bash /workspace/tools/android/build.sh | tee "$log"
+    grep -q '^AAB=' "$log" || { rm -f "$log"; die "no app built (see above)"; }
+    say "done: $(sed -n 's#^APK=/workspace/##p' "$log") (a phone: adb install), $(sed -n 's#^AAB=/workspace/##p' "$log") (Google Play)"
+    rm -f "$log"
+    return
+  fi
+
+  # on GitHub: the workflow, the key in the repository's secrets, the push, the run
+  command -v gh >/dev/null 2>&1 || die "gh (GitHub's command) is needed: https://cli.github.com, then gh auth login (or --local)"
+  local repo; repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || die "no GitHub repository here (bin/jumphp github), or --local"
+  local workflow="$ROOT/.github/workflows/android.yml"
+  mkdir -p "$(dirname "$workflow")"
+  cmp -s "$ROOT/tools/android/workflow.yml" "$workflow" || cp "$ROOT/tools/android/workflow.yml" "$workflow"
+  if ! gh secret list -R "$repo" 2>/dev/null | grep -q '^ANDROID_KEYSTORE_BASE64'; then
+    [ -t 0 ] || die "run bin/jumphp android in a terminal once: it asks before sending the signing key to GitHub"
+    local answer
+    read -rp "Send the upload key ($package) to the secrets of $repo (encrypted, used by the workflow only)? [y/N] " answer
+    [[ "$answer" =~ ^[yYoO] ]] || die "not sent: no build on GitHub (--local builds here)"
+    base64 -w0 "$keys/$package.keystore" | gh secret set ANDROID_KEYSTORE_BASE64 -R "$repo"
+    printf '%s' "$store_pass" | gh secret set ANDROID_KEYSTORE_PASSWORD -R "$repo"
+    printf '%s' "$key_pass" | gh secret set ANDROID_KEY_PASSWORD -R "$repo"
+  fi
+  local branch; branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+  git -C "$ROOT" add "$workflow" "$state"
+  git -C "$ROOT" diff --cached --quiet || git -C "$ROOT" commit -q -m "Android app of $game: version $code ($version_name)"
+  if [ -n "$(git -C "$ROOT" log "@{u}..HEAD" --oneline 2>/dev/null || echo new)" ]; then
+    if [ -t 0 ]; then
+      local answer
+      read -rp "Push $branch to GitHub ($repo) to build from it? [Y/n] " answer
+      [[ "$answer" =~ ^[nN] ]] && die "not pushed: the workflow builds what is on GitHub"
+    fi
+    git -C "$ROOT" push -q -u origin "$branch"
+  fi
+  say "GitHub builds the app ($package $version_name, version $code): first time ~25 min, then ~8"
+  gh workflow run android.yml -R "$repo" --ref "$branch" -f game="$game" -f package="$package" -f version_code="$code" \
+    -f version_name="$version_name"
+  sleep 5
+  local run; run="$(gh run list -R "$repo" --workflow android.yml -L 1 --json databaseId -q '.[0].databaseId')"
+  echo "  https://github.com/$repo/actions/runs/$run" >&2
+  gh run watch "$run" -R "$repo" --exit-status >/dev/null || die "the build failed: gh run view $run -R $repo --log-failed"
+  mkdir -p "$ROOT/$dir/dist/android-native"
+  gh run download "$run" -R "$repo" -D "$ROOT/$dir/dist/android-native" >/dev/null
+  find "$ROOT/$dir/dist/android-native" -mindepth 2 -type f -exec mv -f {} "$ROOT/$dir/dist/android-native/" \; 2>/dev/null
+  find "$ROOT/$dir/dist/android-native" -mindepth 1 -type d -empty -delete
+  say "done: the release android-$game-$version_name-$code on GitHub, and $dir/dist/android-native/ (.apk: a phone, .aab: Google Play)"
+  echo "  Google Play: docs/android-native.md (the first upload in the Play Console by hand)." >&2
 }
 
 # the game as one executable (tools/standalone.sh in docker/standalone): StaticPHP's micro (PHP + SDL, OpenGL, OpenAL)
@@ -828,6 +948,7 @@ main() {
     export:desktop) cmd_export_desktop "$@" ;;
     export:standalone) cmd_export_standalone "$@" ;;
     twa) cmd_twa "$@" ;;
+    android) cmd_android "$@" ;;
     deploy) cmd_deploy "$@" ;;
     pages) cmd_pages "$@" ;;
     lint) cmd_lint ;;

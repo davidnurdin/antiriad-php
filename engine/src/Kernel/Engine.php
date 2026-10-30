@@ -91,7 +91,7 @@ class Engine extends EventEmitter
     {
         $c = $this->config;
         $fullscreen = (bool)$this->options->get('fullscreen', $c->get('fullscreen'));
-        $this->sdl->initSDL($fullscreen && Platform::isDesktop(), $c->title(), $c->width(), $c->height(),
+        $this->sdl->initSDL(($fullscreen && Platform::isDesktop()) || (bool)Platform::setting('JUMPHP_ANDROID'), $c->title(), $c->width(), $c->height(),
             (bool)$c->get('vsync'), (int)$c->get('scale'));
         $this->sdl->getRenderer()->setIntegerScale((bool)$c->get('integer_scale', false));
 

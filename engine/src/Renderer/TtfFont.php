@@ -28,7 +28,7 @@ class TtfFont implements TextDrawer
             \TTF_Init();
             self::$ttfReady = true;
         }
-        $file = str_starts_with($path, '/') ? $path : $this->resolve($path);
+        $file = \JumPHP\Kernel\Platform::isAbsolutePath($path) ? $path : $this->resolve($path);
         $this->font = \TTF_OpenFont($file, $size);
         if (!$this->font) {
             throw new \RuntimeException("TTF_OpenFont($file) failed: " . \SDL_GetError());

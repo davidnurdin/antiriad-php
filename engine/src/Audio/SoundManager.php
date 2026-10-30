@@ -247,7 +247,7 @@ class SoundManager
 
     private function resolve(string $path): string
     {
-        if (str_starts_with($path, '/')) {
+        if (\JumPHP\Kernel\Platform::isAbsolutePath($path)) {
             return $path;
         }
         $root = defined('JUMPHP_ROOT') ? JUMPHP_ROOT : getcwd();

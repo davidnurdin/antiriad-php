@@ -40,16 +40,10 @@ if [ ! -s "$micro" ]; then
   cp /opt/spc/buildroot/bin/micro.sfx "$micro"
 fi
 
-# 2. the game, as the desktop runs it: its files and its vendor/ (the engine's symbolic link followed)
+# 2. the game, as the desktop runs it (tools/stage-game.sh)
 say "the game: $GAME"
-[ -f "$GAME_DIR/vendor/autoload.php" ] || die "games/$GAME has no vendor/ (bin/jumphp install $GAME)"
 stage=/tmp/stage/game
-rm -rf /tmp/stage && mkdir -p "$stage"
-(cd "$GAME_DIR" && tar -ch --exclude=./var --exclude=./dist --exclude=./tests --exclude=./site --exclude=./cache \
-    --exclude=./.phpunit.cache --exclude='./core' --exclude='./core.[0-9]*' --exclude='./vendor/jumphp/engine/tests' --exclude='./vendor/jumphp/engine/web' \
-    --exclude='./vendor/jumphp/engine/vendor' --exclude='./vendor/jumphp/engine/.phpunit.cache' --exclude='*.md' . ) | tar -x -C "$stage"
-mkdir -p "$stage/var"
-build="$(cd "$stage" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)"
+build="$(bash /workspace/tools/stage-game.sh "$GAME_DIR" "$stage")" || die "games/$GAME has no vendor/ (bin/jumphp install $GAME)"
 id="$(sed -nE 's/^ *id: *["'\'']?([a-z0-9-]+).*/\1/p' "$GAME_DIR/config/game.yaml" | head -1)"
 id="${id:-$GAME}"
 

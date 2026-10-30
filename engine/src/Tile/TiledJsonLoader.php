@@ -251,7 +251,7 @@ final class TiledJsonLoader
 
     private static function join(string $dir, string $path): string
     {
-        if (str_starts_with($path, '/')) {
+        if (\JumPHP\Kernel\Platform::isAbsolutePath($path)) {
             return $path;
         }
         $parts = [];

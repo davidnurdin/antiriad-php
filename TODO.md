@@ -43,4 +43,3 @@ the default (Windows, Android).
 
 - the GitHub pre-release `standalone-1460857eb89286a9`: its Linux micro needs AVX-512 (built for GitHub's
   processor, before docker/standalone/spc-target); no key points to it any more
-- `games/https-check`: the temporary HTTPS check (not in git)

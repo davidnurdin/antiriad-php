@@ -28,6 +28,13 @@ bin/jumphp ios pong              # only the iPhone / iPad app (and the simulator
    `apple-<game>-<version>-<build>` with the apps and the two screenshots; the command downloads them into
    `games/<game>/dist/apple/` (the screenshots in `check/`).
 
+**Files that are not in git** (the data of an original game, kept out of a public repository): the command finds
+the game's git-ignored files (not `vendor/`, `var/`, `dist/`...) and, after your yes (`JUMPHP_PRIVATE_FILES=1` without a
+terminal), sends them as `private.tar.gz` in the **draft release** `apple-private-<game>`: a draft is only seen by the
+repository's writers, never published; the workflow puts the files back into the game before the build. Delete it
+with `gh release delete apple-private-<game>` when you no longer build there. (The apps themselves contain the
+files, as the game's web version does: don't publish apps of a game whose data you may not distribute.)
+
 Options: `--bundle-id`, `--version 1.1` (the build number goes up by one at each build), `--macos` / `--ios`,
 `--local` (on a Mac with Xcode, cmake, autoconf and PHP with GD: built and tried there).
 

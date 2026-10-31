@@ -7,9 +7,6 @@
 name: apple
 
 on:
-  # development of the Apple build (removed before main): each push of the branch apple builds Pong
-  push:
-    branches: [apple]
   workflow_dispatch:
     inputs:
       game:
@@ -57,6 +54,19 @@ jobs:
 
       - name: Tools (autoconf for PHP's configure)
         run: brew list autoconf >/dev/null 2>&1 || brew install autoconf
+
+      # the game's files that are not in git (the data of an original game): bin/jumphp apple puts them in a draft
+      # release of the repository, which only its writers see
+      - name: The game's private files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "apple-private-$GAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "apple-private-$GAME" -R "$GITHUB_REPOSITORY" -p private.tar.gz -D "$RUNNER_TEMP"
+            tar -xzf "$RUNNER_TEMP/private.tar.gz" -C "games/$GAME"
+            echo "private files in place: $(tar -tzf "$RUNNER_TEMP/private.tar.gz" | grep -vc '/$')"
+            rm -f "$RUNNER_TEMP/private.tar.gz"
+          fi
 
       - name: The game's vendor/ (composer, the engine from engine/)
         run: |

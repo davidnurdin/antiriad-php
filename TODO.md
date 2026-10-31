@@ -1,17 +1,17 @@
 # TODO
 
-## A game as a native iPhone / iPad app (as `bin/jumphp android`)
+## Apple apps: signing, TestFlight, the App Store (needs the Apple developer account)
 
-The same design as the native Android app (docs/android-native.md): PHP 8.5 embed (static, no JIT) with JumPHP's
-extensions, SDL2 (its Xcode project, UIKit), OpenGL ES (deprecated by Apple but still there; or SDL's Metal
-renderer for the 2D), OpenAL Soft (CoreAudio), the on-screen controls drawn by the engine, the game in the app's
-bundle.
+`bin/jumphp apple <game>` (docs/apple.md) builds the macOS app (.dmg, Apple silicon + Intel), the iPhone / iPad
+app (.ipa) and the simulator's app on GitHub's Macs, and tries them there; they are signed ad hoc. With the account
+(99 $ a year):
 
-- built on GitHub's macOS runners (Xcode is needed): `bin/jumphp ios <game>` as `bin/jumphp android`, a workflow
-  in the project, the signing in its secrets, the build sent to TestFlight (App Store Connect API key)
-- an Apple developer account is needed (99 $ a year), even to install it on one's own iPhone for more than 7 days
-- App Store: interpreted code inside the app is allowed (guideline 2.5.2), not code downloaded later
-- tested in the iOS simulator on GitHub's macOS runner (xcrun simctl, screenshots)
+- macOS: Developer ID certificate in the repository's secrets, `codesign --options runtime` + `notarytool` +
+  `stapler` in the workflow: opens without the right click
+- iOS: distribution certificate + provisioning profile (or automatic signing with an App Store Connect API key),
+  the .ipa signed, uploaded to TestFlight (`xcrun altool --upload-app` / the App Store Connect API), then the store
+  listing (screenshots: the simulator's, as check.sh takes them)
+- a playground "Apple" section (bundle id, as the Android one) when the App Store is reached
 
 ## Without PHP at run time: illegalstudio (to study)
 

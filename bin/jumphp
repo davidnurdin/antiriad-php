@@ -531,6 +531,33 @@ cmd_apple() {
     fi
     git -C "$ROOT" push -q -u origin "$branch"
   fi
+  # the game's files that git ignores (the data of an original game): in a draft release of the repository, which
+  # only its writers see (never a public release); the workflow puts them back before the build
+  local private
+  private="$(cd "$ROOT/$dir" && git ls-files --others --ignored --exclude-standard . 2>/dev/null \
+    | grep -vE '^(vendor|var|dist|cache|android|apple|tests|site|node_modules)/|(^|/)core(\.[0-9]+)?$|\.phpunit' || true)"
+  if [ -n "$private" ]; then
+    local count send=0; count="$(printf '%s\n' "$private" | wc -l | xargs)"
+    if [ -t 0 ]; then
+      local answer
+      read -rp "$count files of $dir are not in git (e.g. $(printf '%s\n' "$private" | head -1)). Send them to a draft release of $repo (only its writers see it) for the build? [y/N] " answer
+      [[ "$answer" =~ ^[yYoO] ]] && send=1
+    elif [ "${JUMPHP_PRIVATE_FILES:-}" = 1 ]; then
+      send=1
+    fi
+    if [ "$send" = 1 ]; then
+      local archive; archive="$(mktemp -d)/private.tar.gz"
+      printf '%s\n' "$private" | tar -czf "$archive" -C "$ROOT/$dir" -T -
+      gh release view "apple-private-$game" -R "$repo" >/dev/null 2>&1 \
+        || gh release create "apple-private-$game" -R "$repo" --draft --title "$game: private files (Apple build)" \
+             --notes "The files of $dir that are not in git, for the workflow apple.yml. A draft: only the repository's writers see it. Never publish it." >/dev/null
+      gh release upload "apple-private-$game" "$archive" -R "$repo" --clobber >/dev/null
+      rm -rf "$(dirname "$archive")"
+      say "$count private files sent (draft release apple-private-$game)"
+    else
+      say "$count files of $dir are not in git and stay here: the apps are built without them (JUMPHP_PRIVATE_FILES=1 sends them)"
+    fi
+  fi
   say "GitHub builds the apps on a Mac ($bundle $version, build $build: $platforms): first time ~40 min, then ~10"
   gh workflow run apple.yml -R "$repo" --ref "$branch" -f game="$game" -f bundle_id="$bundle" -f version="$version" \
     -f build="$build" -f platforms="$platforms"

@@ -328,6 +328,7 @@ ios_bundle() {
   <key>UISupportedInterfaceOrientations</key><array>$orientations</array>
   <key>UISupportedInterfaceOrientations~ipad</key><array>$orientations</array>
   <key>GCSupportsControllerUserInteraction</key><true/>
+  <key>UIApplicationSupportsIndirectInputEvents</key><true/>
   <key>ITSAppUsesNonExemptEncryption</key><false/>
 </dict>
 </plist>

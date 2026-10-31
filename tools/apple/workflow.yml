@@ -65,6 +65,8 @@ jobs:
             gh release download "apple-private-$GAME" -R "$GITHUB_REPOSITORY" -p private.tar.gz -D "$RUNNER_TEMP"
             tar -xzf "$RUNNER_TEMP/private.tar.gz" -C "games/$GAME"
             echo "private files in place: $(tar -tzf "$RUNNER_TEMP/private.tar.gz" | grep -vc '/$')"
+            # the apps contain them: their release is a draft (its owner decides whether to publish it)
+            echo "PRIVATE_FILES=1" >> "$GITHUB_ENV"
             rm -f "$RUNNER_TEMP/private.tar.gz"
           fi
 
@@ -124,7 +126,8 @@ jobs:
           cd "games/$GAME/dist/apple"
           for f in check/*.png; do cp "$f" "$GAME-$VERSION-screenshot-$(basename "$f")"; done
           files=(./*.zip ./*.dmg ./*.ipa ./*-screenshot-*.png)
-          gh release create "$tag" "${files[@]}" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+          draft=(); [ "${PRIVATE_FILES:-}" = 1 ] && draft=(--draft)
+          gh release create "$tag" "${files[@]}" "${draft[@]}" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
             --title "$GAME $VERSION (macOS / iOS, build $BUILD)" \
             --notes "The native Apple apps of $GAME: .dmg / -macos.zip for a Mac (Apple silicon and Intel), .ipa for an iPhone / iPad (to sign with an Apple developer account), -ios-simulator.zip for Xcode's simulator. Signed ad hoc: on a Mac, right click > Open the first time. Docs: JumPHP's docs/apple.md." \
             || gh release upload "$tag" "${files[@]}" -R "$GITHUB_REPOSITORY" --clobber

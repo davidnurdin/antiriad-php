@@ -91,7 +91,7 @@ class Engine extends EventEmitter
     {
         $c = $this->config;
         $fullscreen = (bool)$this->options->get('fullscreen', $c->get('fullscreen'));
-        $this->sdl->initSDL(($fullscreen && Platform::isDesktop()) || (bool)Platform::setting('JUMPHP_ANDROID'), $c->title(), $c->width(), $c->height(),
+        $this->sdl->initSDL(($fullscreen && Platform::isDesktop()) || Platform::isPhoneApp(), $c->title(), $c->width(), $c->height(),
             (bool)$c->get('vsync'), (int)$c->get('scale'));
         $this->sdl->getRenderer()->setIntegerScale((bool)$c->get('integer_scale', false));
 
@@ -106,7 +106,7 @@ class Engine extends EventEmitter
         $this->input->on('quit', fn () => $this->quit());
         $this->input->on('key', fn (int $key) => $this->globalKey($key));
         if (!Platform::isWasm() && Platform::setting('JUMPHP_TOUCH_CONTROLS')) {
-            // the native Android app: the on-screen controls of the browser version (engine/web/touch.js), drawn here
+            // the native Android / iOS app: the on-screen controls of the browser version (engine/web/touch.js), drawn here
             $controls = new \JumPHP\Input\TouchControls($this->input->getKeyboard(), $this->input->getMouse(), $this->input,
                 (array)$c->get('touch', []), $this->font());
             $this->input->setControls($controls);

@@ -65,6 +65,11 @@ Games (<game> = a folder of games/, e.g. pong)
                             the game as a native Android app (no browser: PHP, SDL, OpenGL ES, OpenAL inside), signed:
                             built by GitHub Actions in your repository and published as a release (.apk + .aab for
                             Google Play); --local: built here in Docker. docs/android-native.md
+  apple <game> [--macos] [--ios] [--bundle-id ID] [--version X] [--local]
+                            the game as native Apple apps (no browser: PHP, SDL, OpenGL, OpenAL inside): built by
+                            GitHub Actions on a Mac in your repository, published as a release: .dmg / .zip (a Mac,
+                            Apple silicon + Intel), .ipa (iPhone / iPad), the simulator's app, screenshots of both
+                            running there. ios <game> / macos <game>: one of them. --local: on this Mac. docs/apple.md
   export:standalone <game> [--linux] [--windows]
                             the game as one executable, nothing to install (PHP, SDL, OpenGL, OpenAL inside):
                             dist/standalone/<game>-linux-x86_64 and/or <game>-windows-x86_64.exe (docs/standalone.md)
@@ -457,6 +462,116 @@ cmd_android() {
   find "$ROOT/$dir/dist/android-native" -mindepth 1 -type d -empty -delete
   say "done: the release android-$game-$version_name-$code on GitHub, and $dir/dist/android-native/ (.apk: a phone, .aab: Google Play)"
   echo "  Google Play: docs/android-native.md (the first upload in the Play Console by hand)." >&2
+}
+
+# the game as native Apple apps, macOS and iPhone / iPad (tools/apple/build.sh: Xcode, so a Mac): on GitHub (the
+# workflow .github/workflows/apple.yml, from tools/apple/workflow.yml, on a macOS runner; the release has the apps and
+# their screenshots) or --local on a Mac. games/<game>/apple/app.json (in git): bundle identifier, version, build.
+cmd_apple() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local local_build=0 bundle="" version="" platforms=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --local) local_build=1 ;;
+      --macos) platforms="$platforms macos" ;;
+      --ios) platforms="$platforms ios" ;;
+      --bundle-id) bundle="${2:-}"; shift ;;
+      --bundle-id=*) bundle="${1#*=}" ;;
+      --version) version="${2:-}"; shift ;;
+      --version=*) version="${1#*=}" ;;
+      *) die "unknown option $1" ;;
+    esac
+    shift
+  done
+  platforms="$(echo "${platforms:-macos ios}" | xargs)"
+  local state="$ROOT/$dir/apple/app.json" build=0
+  mkdir -p "$ROOT/$dir/apple"
+  if [ -f "$state" ]; then
+    [ -n "$bundle" ] || bundle="$(sed -nE 's/^ *"bundleId": *"([^"]+)".*/\1/p' "$state")"
+    build="$(sed -nE 's/^ *"build": *([0-9]+).*/\1/p' "$state")"
+    [ -n "$version" ] || version="$(sed -nE 's/^ *"version": *"([^"]+)".*/\1/p' "$state")"
+  fi
+  if [ -z "$bundle" ]; then
+    local owner suggestion
+    owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]_' '[:lower:]-')"
+    suggestion="io.github.${owner:-me}.$game"
+    if [ -t 0 ]; then
+      read -rp "The apps' bundle identifier (App Store; never changes once published) [$suggestion]: " bundle
+    fi
+    bundle="${bundle:-$suggestion}"
+  fi
+  [[ "$bundle" =~ ^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z0-9-]+)+$ ]] || die "--bundle-id: like io.github.me.my-game (letters, digits, hyphens, dots)"
+  build=$(( ${build:-0} + 1 ))
+  version="${version:-1.0}"
+  printf '{\n    "bundleId": "%s",\n    "build": %d,\n    "version": "%s"\n}\n' "$bundle" "$build" "$version" > "$state"
+
+  if [ "$local_build" = 1 ]; then
+    [ "$(uname)" = Darwin ] || die "--local builds on a Mac with Xcode; elsewhere, without --local: on GitHub's Macs"
+    [ -f "$ROOT/$dir/vendor/autoload.php" ] || (cd "$ROOT/$dir" && composer install --no-dev --no-interaction --ignore-platform-reqs)
+    GAME="$game" PLATFORMS="$platforms" BUNDLE_ID="$bundle" VERSION="$version" BUILD="$build" bash "$ROOT/tools/apple/build.sh"
+    bash "$ROOT/tools/apple/check.sh" "$game" "$platforms"
+    say "done: $dir/dist/apple/ (screenshots in check/)"
+    return
+  fi
+
+  # on GitHub: the workflow, the push, the run on a macOS runner, the apps downloaded
+  command -v gh >/dev/null 2>&1 || die "gh (GitHub's command) is needed: https://cli.github.com, then gh auth login"
+  local repo; repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || die "no GitHub repository here (bin/jumphp github)"
+  local workflow="$ROOT/.github/workflows/apple.yml"
+  mkdir -p "$(dirname "$workflow")"
+  cmp -s "$ROOT/tools/apple/workflow.yml" "$workflow" || cp "$ROOT/tools/apple/workflow.yml" "$workflow"
+  local branch; branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+  git -C "$ROOT" add "$workflow" "$state"
+  git -C "$ROOT" diff --cached --quiet || git -C "$ROOT" commit -q -m "Apple apps of $game: build $build ($version)"
+  if [ -n "$(git -C "$ROOT" log "@{u}..HEAD" --oneline 2>/dev/null || echo new)" ]; then
+    if [ -t 0 ]; then
+      local answer
+      read -rp "Push $branch to GitHub ($repo) to build from it? [Y/n] " answer
+      [[ "$answer" =~ ^[nN] ]] && die "not pushed: the workflow builds what is on GitHub"
+    fi
+    git -C "$ROOT" push -q -u origin "$branch"
+  fi
+  # the game's files that git ignores (the data of an original game): in a draft release of the repository, which
+  # only its writers see (never a public release); the workflow puts them back before the build
+  local private
+  private="$(cd "$ROOT/$dir" && git ls-files --others --ignored --exclude-standard . 2>/dev/null \
+    | grep -vE '^(vendor|var|dist|cache|android|apple|tests|site|node_modules)/|(^|/)core(\.[0-9]+)?$|\.phpunit' || true)"
+  if [ -n "$private" ]; then
+    local count send=0; count="$(printf '%s\n' "$private" | wc -l | xargs)"
+    if [ -t 0 ]; then
+      local answer
+      read -rp "$count files of $dir are not in git (e.g. $(printf '%s\n' "$private" | head -1)). Send them to a draft release of $repo (only its writers see it) for the build? [y/N] " answer
+      [[ "$answer" =~ ^[yYoO] ]] && send=1
+    elif [ "${JUMPHP_PRIVATE_FILES:-}" = 1 ]; then
+      send=1
+    fi
+    if [ "$send" = 1 ]; then
+      local archive; archive="$(mktemp -d)/private.tar.gz"
+      printf '%s\n' "$private" | tar -czf "$archive" -C "$ROOT/$dir" -T -
+      gh release view "apple-private-$game" -R "$repo" >/dev/null 2>&1 \
+        || gh release create "apple-private-$game" -R "$repo" --draft --title "$game: private files (Apple build)" \
+             --notes "The files of $dir that are not in git, for the workflow apple.yml. A draft: only the repository's writers see it. Never publish it." >/dev/null
+      gh release upload "apple-private-$game" "$archive" -R "$repo" --clobber >/dev/null
+      rm -rf "$(dirname "$archive")"
+      say "$count private files sent (draft release apple-private-$game)"
+    else
+      say "$count files of $dir are not in git and stay here: the apps are built without them (JUMPHP_PRIVATE_FILES=1 sends them)"
+    fi
+  fi
+  say "GitHub builds the apps on a Mac ($bundle $version, build $build: $platforms): first time ~40 min, then ~10"
+  gh workflow run apple.yml -R "$repo" --ref "$branch" -f game="$game" -f bundle_id="$bundle" -f version="$version" \
+    -f build="$build" -f platforms="$platforms"
+  sleep 5
+  local run; run="$(gh run list -R "$repo" --workflow apple.yml -L 1 --json databaseId -q '.[0].databaseId')"
+  echo "  https://github.com/$repo/actions/runs/$run" >&2
+  gh run watch "$run" -R "$repo" --exit-status >/dev/null || die "the build failed: gh run view $run -R $repo --log-failed"
+  local out="$ROOT/$dir/dist/apple"
+  rm -rf "$out" && mkdir -p "$out"
+  gh run download "$run" -R "$repo" -D "$out" >/dev/null
+  local sub; sub="$(find "$out" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -n "$sub" ] && { cp -R "$sub"/. "$out"/ && rm -rf "$sub"; }
+  say "done: the release apple-$game-$version-$build on GitHub, and $dir/dist/apple/ (screenshots in check/)"
+  echo "  A Mac: the .dmg (right click > Open the first time). iPhone / iPad: the .ipa, signed with an Apple account (docs/apple.md)." >&2
 }
 
 # the game as one executable (tools/standalone.sh in docker/standalone): StaticPHP's micro (PHP + SDL, OpenGL, OpenAL)
@@ -949,6 +1064,9 @@ main() {
     export:standalone) cmd_export_standalone "$@" ;;
     twa) cmd_twa "$@" ;;
     android) cmd_android "$@" ;;
+    apple) cmd_apple "$@" ;;
+    ios) local g="${1:-}"; shift || true; cmd_apple "$g" --ios "$@" ;;
+    macos) local g="${1:-}"; shift || true; cmd_apple "$g" --macos "$@" ;;
     deploy) cmd_deploy "$@" ;;
     pages) cmd_pages "$@" ;;
     lint) cmd_lint ;;

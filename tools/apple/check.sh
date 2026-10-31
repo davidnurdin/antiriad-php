@@ -17,7 +17,7 @@ OUT="$ROOT/games/$GAME/dist/apple"
 CHECK="$OUT/check"
 rm -rf "$CHECK" && mkdir -p "$CHECK"
 # macOS has no timeout(1)
-limit() { local seconds="$1"; shift; perl -e 'alarm shift; exec @ARGV or die "$!"' "$seconds" "$@"; }
+limit() { local seconds="$1"; shift; perl -e 'alarm shift; exec { $ARGV[0] } @ARGV or die "$!"' "$seconds" "$@"; }
 errors() { grep -E "PHP (Fatal|Parse|Warning)|Uncaught|Fatal error|the boot script did not run" "$@" || true; }
 
 for p in $PLATFORMS; do

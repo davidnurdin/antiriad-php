@@ -71,7 +71,7 @@ class Audio3d
     /** A WAV file of the game (8 / 16-bit PCM). */
     public function load(string $name, string $path): bool
     {
-        $file = str_starts_with($path, '/') ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
+        $file = \JumPHP\Kernel\Platform::isAbsolutePath($path) ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
         $data = @file_get_contents($file);
         return $data !== false && $this->synth($name, $data);
     }

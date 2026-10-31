@@ -24,6 +24,18 @@ final class Platform
         return (bool)self::setting('JUMPHP_MOBILE', false);
     }
 
+    /** The native phone app (Android: JUMPHP_ANDROID, iPhone / iPad: JUMPHP_IOS): always full screen, the game's orientation. */
+    public static function isPhoneApp(): bool
+    {
+        return (bool)self::setting('JUMPHP_ANDROID', false) || (bool)self::setting('JUMPHP_IOS', false);
+    }
+
+    /** A path from the root of a disk ('/x', '\\x', 'C:\\x', 'C:/x') or a stream ('phar://...'): not under the game's folder. */
+    public static function isAbsolutePath(string $path): bool
+    {
+        return $path !== '' && ($path[0] === '/' || $path[0] === '\\' || preg_match('#^([a-zA-Z]:[\\\\/]|[a-z][a-z0-9+.-]*://)#', $path) === 1);
+    }
+
     /** Headless run: smoke test, screenshot or a game test (no window, dummy audio). */
     public static function isHeadless(): bool
     {

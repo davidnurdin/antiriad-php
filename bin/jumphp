@@ -61,6 +61,18 @@ Games (<game> = a folder of games/, e.g. pong)
                             keys: JSON [[second, "ArrowDown"], [2, "Enter"]] -> dist/webshot.png
                             (serve / webshot: JUMPHP_WEB=remote uses dist/remote, JUMPHP_WEB=site dist/site)
   export:desktop <game>     a Docker image that runs the game (jumphp/game-<game>)
+  android <game> [--local] [--package ID] [--version-name X]
+                            the game as a native Android app (no browser: PHP, SDL, OpenGL ES, OpenAL inside), signed:
+                            built by GitHub Actions in your repository and published as a release (.apk + .aab for
+                            Google Play); --local: built here in Docker. docs/android-native.md
+  apple <game> [--macos] [--ios] [--bundle-id ID] [--version X] [--local]
+                            the game as native Apple apps (no browser: PHP, SDL, OpenGL, OpenAL inside): built by
+                            GitHub Actions on a Mac in your repository, published as a release: .dmg / .zip (a Mac,
+                            Apple silicon + Intel), .ipa (iPhone / iPad), the simulator's app, screenshots of both
+                            running there. ios <game> / macos <game>: one of them. --local: on this Mac. docs/apple.md
+  export:standalone <game> [--linux] [--windows]
+                            the game as one executable, nothing to install (PHP, SDL, OpenGL, OpenAL inside):
+                            dist/standalone/<game>-linux-x86_64 and/or <game>-windows-x86_64.exe (docs/standalone.md)
   twa <game> [--url URL] [--package ID] [--name NAME] [--same-version]
                             the game as an Android app for Google Play (Trusted Web Activity, Bubblewrap):
                             dist/android/<game>-<v>.aab (Play) + .apk (a phone) + assetlinks.json (docs/android.md).
@@ -334,6 +346,264 @@ cmd_twa() {
     echo "  The key: $home/android/keys/$package.keystore (+ .env, its password): back them up; never in git."
     echo "  Next version: bin/jumphp twa $game (the version goes up by one; twa-manifest.json is in git)."
   } >&2
+}
+
+# the game as a native Android app (tools/android/build.sh in docker/android-native): on GitHub (the workflow
+# .github/workflows/android.yml, from tools/android/workflow.yml; the release has the .apk and the .aab) or --local.
+# games/<game>/android/app.json (in git): package, version; the upload key: ~/.jumphp/android/keys (never in git).
+cmd_android() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local local_build=0 package="" version_name=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --local) local_build=1 ;;
+      --package) package="${2:-}"; shift ;;
+      --package=*) package="${1#*=}" ;;
+      --version-name) version_name="${2:-}"; shift ;;
+      --version-name=*) version_name="${1#*=}" ;;
+      *) die "unknown option $1" ;;
+    esac
+    shift
+  done
+  local state="$ROOT/$dir/android/app.json" code=0
+  mkdir -p "$ROOT/$dir/android"
+  if [ -f "$state" ]; then
+    [ -n "$package" ] || package="$(sed -nE 's/^ *"package": *"([^"]+)".*/\1/p' "$state")"
+    code="$(sed -nE 's/^ *"versionCode": *([0-9]+).*/\1/p' "$state")"
+    [ -n "$version_name" ] || version_name="$(sed -nE 's/^ *"versionName": *"([^"]+)".*/\1/p' "$state")"
+  fi
+  if [ -z "$package" ]; then
+    # the TWA's package if the game has one: the native app replaces it on Google Play (same package, same key)
+    package="$(sed -nE 's/^ *"packageId": *"([^"]+)".*/\1/p' "$ROOT/$dir/android/twa-manifest.json" 2>/dev/null || true)"
+    local owner suggestion
+    owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]-' '[:lower:]_')"
+    suggestion="${package:-io.github.${owner:-me}.$(echo "$game" | tr '-' '_')}"
+    if [ -t 0 ]; then
+      read -rp "The app's package on Google Play (never changes once published) [$suggestion]: " package
+    fi
+    package="${package:-$suggestion}"
+  fi
+  [[ "$package" =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]] || die "--package: like io.github.me.my_game (lower case, dots)"
+  code=$(( ${code:-0} + 1 ))
+  version_name="${version_name:-1.0}"
+  printf '{\n    "package": "%s",\n    "versionCode": %d,\n    "versionName": "%s"\n}\n' "$package" "$code" "$version_name" > "$state"
+
+  # the upload key (the TWA's if there is one): ~/.jumphp/android/keys/<package>.keystore + .env
+  local home="${JUMPHP_HOME:-$HOME/.jumphp}" image="${JUMPHP_ANDROID_IMAGE:-jumphp/android-native:dev}"
+  local keys="$home/android/keys"
+  mkdir -p "$keys" && chmod 700 "$keys"
+  docker image inspect "$image" >/dev/null 2>&1 || { say "building $image (first time, ~3 min)"; docker build -t "$image" docker/android-native; }
+  if [ ! -f "$keys/$package.keystore" ]; then
+    say "a new upload key: $keys/$package.keystore (back it up; never in git)"
+    local pass; pass="$(head -c 18 /dev/urandom | base64 | tr '+/' '-_')"
+    docker run --rm --user "$(id -u):$(id -g)" -v "$keys:/keys" "$image" keytool -genkeypair -keystore "/keys/$package.keystore" \
+      -storetype PKCS12 -alias upload -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=$package" \
+      -storepass "$pass" -keypass "$pass" >/dev/null 2>&1 || die "keytool failed"
+    printf 'BUBBLEWRAP_KEYSTORE_PASSWORD=%s\nBUBBLEWRAP_KEY_PASSWORD=%s\n' "$pass" "$pass" > "$keys/$package.env"
+    chmod 600 "$keys/$package.keystore" "$keys/$package.env"
+  fi
+  local store_pass key_pass
+  store_pass="$(sed -n 's/^BUBBLEWRAP_KEYSTORE_PASSWORD=//p' "$keys/$package.env")"
+  key_pass="$(sed -n 's/^BUBBLEWRAP_KEY_PASSWORD=//p' "$keys/$package.env")"
+
+  if [ "$local_build" = 1 ]; then
+    local sdk="$home/android-sdk"
+    [ -d "$sdk/ndk/29.0.14206865" ] || die "the Android SDK with its NDK is needed in $sdk: run bin/jumphp twa once (it installs the SDK after your yes to its license), then: $sdk/cmdline-tools/latest/bin/sdkmanager --install \"ndk;29.0.14206865\""
+    ensure_vendor "$dir"
+    mkdir -p "$home/android-native"
+    local log; log="$(mktemp)"
+    docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT:/workspace" -v "$home/android-native:/cache" \
+      -v "$sdk:/opt/android-sdk" -v "$keys:/keys:ro" -e GAME="$game" -e PACKAGE="$package" -e VERSION_CODE="$code" \
+      -e VERSION_NAME="$version_name" -e KEYSTORE="/keys/$package.keystore" -e KEYSTORE_PASSWORD="$store_pass" \
+      -e KEY_PASSWORD="$key_pass" -e KEY_ALIAS=upload -e ABIS="${JUMPHP_ANDROID_ABIS:-arm64-v8a x86_64}" \
+      "$image" bash /workspace/tools/android/build.sh | tee "$log"
+    grep -q '^AAB=' "$log" || { rm -f "$log"; die "no app built (see above)"; }
+    say "done: $(sed -n 's#^APK=/workspace/##p' "$log") (a phone: adb install), $(sed -n 's#^AAB=/workspace/##p' "$log") (Google Play)"
+    rm -f "$log"
+    return
+  fi
+
+  # on GitHub: the workflow, the key in the repository's secrets, the push, the run
+  command -v gh >/dev/null 2>&1 || die "gh (GitHub's command) is needed: https://cli.github.com, then gh auth login (or --local)"
+  local repo; repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || die "no GitHub repository here (bin/jumphp github), or --local"
+  local workflow="$ROOT/.github/workflows/android.yml"
+  mkdir -p "$(dirname "$workflow")"
+  cmp -s "$ROOT/tools/android/workflow.yml" "$workflow" || cp "$ROOT/tools/android/workflow.yml" "$workflow"
+  if ! gh secret list -R "$repo" 2>/dev/null | grep -q '^ANDROID_KEYSTORE_BASE64'; then
+    [ -t 0 ] || die "run bin/jumphp android in a terminal once: it asks before sending the signing key to GitHub"
+    local answer
+    read -rp "Send the upload key ($package) to the secrets of $repo (encrypted, used by the workflow only)? [y/N] " answer
+    [[ "$answer" =~ ^[yYoO] ]] || die "not sent: no build on GitHub (--local builds here)"
+    base64 -w0 "$keys/$package.keystore" | gh secret set ANDROID_KEYSTORE_BASE64 -R "$repo"
+    printf '%s' "$store_pass" | gh secret set ANDROID_KEYSTORE_PASSWORD -R "$repo"
+    printf '%s' "$key_pass" | gh secret set ANDROID_KEY_PASSWORD -R "$repo"
+  fi
+  local branch; branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+  git -C "$ROOT" add "$workflow" "$state"
+  git -C "$ROOT" diff --cached --quiet || git -C "$ROOT" commit -q -m "Android app of $game: version $code ($version_name)"
+  if [ -n "$(git -C "$ROOT" log "@{u}..HEAD" --oneline 2>/dev/null || echo new)" ]; then
+    if [ -t 0 ]; then
+      local answer
+      read -rp "Push $branch to GitHub ($repo) to build from it? [Y/n] " answer
+      [[ "$answer" =~ ^[nN] ]] && die "not pushed: the workflow builds what is on GitHub"
+    fi
+    git -C "$ROOT" push -q -u origin "$branch"
+  fi
+  say "GitHub builds the app ($package $version_name, version $code): first time ~25 min, then ~8"
+  gh workflow run android.yml -R "$repo" --ref "$branch" -f game="$game" -f package="$package" -f version_code="$code" \
+    -f version_name="$version_name"
+  sleep 5
+  local run; run="$(gh run list -R "$repo" --workflow android.yml -L 1 --json databaseId -q '.[0].databaseId')"
+  echo "  https://github.com/$repo/actions/runs/$run" >&2
+  gh run watch "$run" -R "$repo" --exit-status >/dev/null || die "the build failed: gh run view $run -R $repo --log-failed"
+  mkdir -p "$ROOT/$dir/dist/android-native"
+  gh run download "$run" -R "$repo" -D "$ROOT/$dir/dist/android-native" >/dev/null
+  find "$ROOT/$dir/dist/android-native" -mindepth 2 -type f -exec mv -f {} "$ROOT/$dir/dist/android-native/" \; 2>/dev/null
+  find "$ROOT/$dir/dist/android-native" -mindepth 1 -type d -empty -delete
+  say "done: the release android-$game-$version_name-$code on GitHub, and $dir/dist/android-native/ (.apk: a phone, .aab: Google Play)"
+  echo "  Google Play: docs/android-native.md (the first upload in the Play Console by hand)." >&2
+}
+
+# the game as native Apple apps, macOS and iPhone / iPad (tools/apple/build.sh: Xcode, so a Mac): on GitHub (the
+# workflow .github/workflows/apple.yml, from tools/apple/workflow.yml, on a macOS runner; the release has the apps and
+# their screenshots) or --local on a Mac. games/<game>/apple/app.json (in git): bundle identifier, version, build.
+cmd_apple() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local local_build=0 bundle="" version="" platforms=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --local) local_build=1 ;;
+      --macos) platforms="$platforms macos" ;;
+      --ios) platforms="$platforms ios" ;;
+      --bundle-id) bundle="${2:-}"; shift ;;
+      --bundle-id=*) bundle="${1#*=}" ;;
+      --version) version="${2:-}"; shift ;;
+      --version=*) version="${1#*=}" ;;
+      *) die "unknown option $1" ;;
+    esac
+    shift
+  done
+  platforms="$(echo "${platforms:-macos ios}" | xargs)"
+  local state="$ROOT/$dir/apple/app.json" build=0
+  mkdir -p "$ROOT/$dir/apple"
+  if [ -f "$state" ]; then
+    [ -n "$bundle" ] || bundle="$(sed -nE 's/^ *"bundleId": *"([^"]+)".*/\1/p' "$state")"
+    build="$(sed -nE 's/^ *"build": *([0-9]+).*/\1/p' "$state")"
+    [ -n "$version" ] || version="$(sed -nE 's/^ *"version": *"([^"]+)".*/\1/p' "$state")"
+  fi
+  if [ -z "$bundle" ]; then
+    local owner suggestion
+    owner="$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed -nE 's#.*github\.com[:/]([^/]+)/.*#\1#p' | tr '[:upper:]_' '[:lower:]-')"
+    suggestion="io.github.${owner:-me}.$game"
+    if [ -t 0 ]; then
+      read -rp "The apps' bundle identifier (App Store; never changes once published) [$suggestion]: " bundle
+    fi
+    bundle="${bundle:-$suggestion}"
+  fi
+  [[ "$bundle" =~ ^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z0-9-]+)+$ ]] || die "--bundle-id: like io.github.me.my-game (letters, digits, hyphens, dots)"
+  build=$(( ${build:-0} + 1 ))
+  version="${version:-1.0}"
+  printf '{\n    "bundleId": "%s",\n    "build": %d,\n    "version": "%s"\n}\n' "$bundle" "$build" "$version" > "$state"
+
+  if [ "$local_build" = 1 ]; then
+    [ "$(uname)" = Darwin ] || die "--local builds on a Mac with Xcode; elsewhere, without --local: on GitHub's Macs"
+    [ -f "$ROOT/$dir/vendor/autoload.php" ] || (cd "$ROOT/$dir" && composer install --no-dev --no-interaction --ignore-platform-reqs)
+    GAME="$game" PLATFORMS="$platforms" BUNDLE_ID="$bundle" VERSION="$version" BUILD="$build" bash "$ROOT/tools/apple/build.sh"
+    bash "$ROOT/tools/apple/check.sh" "$game" "$platforms"
+    say "done: $dir/dist/apple/ (screenshots in check/)"
+    return
+  fi
+
+  # on GitHub: the workflow, the push, the run on a macOS runner, the apps downloaded
+  command -v gh >/dev/null 2>&1 || die "gh (GitHub's command) is needed: https://cli.github.com, then gh auth login"
+  local repo; repo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || die "no GitHub repository here (bin/jumphp github)"
+  local workflow="$ROOT/.github/workflows/apple.yml"
+  mkdir -p "$(dirname "$workflow")"
+  cmp -s "$ROOT/tools/apple/workflow.yml" "$workflow" || cp "$ROOT/tools/apple/workflow.yml" "$workflow"
+  local branch; branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"
+  git -C "$ROOT" add "$workflow" "$state"
+  git -C "$ROOT" diff --cached --quiet || git -C "$ROOT" commit -q -m "Apple apps of $game: build $build ($version)"
+  if [ -n "$(git -C "$ROOT" log "@{u}..HEAD" --oneline 2>/dev/null || echo new)" ]; then
+    if [ -t 0 ]; then
+      local answer
+      read -rp "Push $branch to GitHub ($repo) to build from it? [Y/n] " answer
+      [[ "$answer" =~ ^[nN] ]] && die "not pushed: the workflow builds what is on GitHub"
+    fi
+    git -C "$ROOT" push -q -u origin "$branch"
+  fi
+  # the game's files that git ignores (the data of an original game): in a draft release of the repository, which
+  # only its writers see (never a public release); the workflow puts them back before the build
+  local private
+  private="$(cd "$ROOT/$dir" && git ls-files --others --ignored --exclude-standard . 2>/dev/null \
+    | grep -vE '^(vendor|var|dist|cache|android|apple|tests|site|node_modules)/|(^|/)core(\.[0-9]+)?$|\.phpunit' || true)"
+  if [ -n "$private" ]; then
+    local count send=0; count="$(printf '%s\n' "$private" | wc -l | xargs)"
+    if [ -t 0 ]; then
+      local answer
+      read -rp "$count files of $dir are not in git (e.g. $(printf '%s\n' "$private" | head -1)). Send them to a draft release of $repo (only its writers see it) for the build? [y/N] " answer
+      [[ "$answer" =~ ^[yYoO] ]] && send=1
+    elif [ "${JUMPHP_PRIVATE_FILES:-}" = 1 ]; then
+      send=1
+    fi
+    if [ "$send" = 1 ]; then
+      local archive; archive="$(mktemp -d)/private.tar.gz"
+      printf '%s\n' "$private" | tar -czf "$archive" -C "$ROOT/$dir" -T -
+      gh release view "apple-private-$game" -R "$repo" >/dev/null 2>&1 \
+        || gh release create "apple-private-$game" -R "$repo" --draft --title "$game: private files (Apple build)" \
+             --notes "The files of $dir that are not in git, for the workflow apple.yml. A draft: only the repository's writers see it. Never publish it." >/dev/null
+      gh release upload "apple-private-$game" "$archive" -R "$repo" --clobber >/dev/null
+      rm -rf "$(dirname "$archive")"
+      say "$count private files sent (draft release apple-private-$game)"
+    else
+      say "$count files of $dir are not in git and stay here: the apps are built without them (JUMPHP_PRIVATE_FILES=1 sends them)"
+    fi
+  fi
+  say "GitHub builds the apps on a Mac ($bundle $version, build $build: $platforms): first time ~40 min, then ~10"
+  gh workflow run apple.yml -R "$repo" --ref "$branch" -f game="$game" -f bundle_id="$bundle" -f version="$version" \
+    -f build="$build" -f platforms="$platforms"
+  sleep 5
+  local run; run="$(gh run list -R "$repo" --workflow apple.yml -L 1 --json databaseId -q '.[0].databaseId')"
+  echo "  https://github.com/$repo/actions/runs/$run" >&2
+  gh run watch "$run" -R "$repo" --exit-status >/dev/null || die "the build failed: gh run view $run -R $repo --log-failed"
+  local out="$ROOT/$dir/dist/apple"
+  rm -rf "$out" && mkdir -p "$out"
+  gh run download "$run" -R "$repo" -D "$out" >/dev/null
+  local sub; sub="$(find "$out" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -n "$sub" ] && { cp -R "$sub"/. "$out"/ && rm -rf "$sub"; }
+  say "done: the release apple-$game-$version-$build on GitHub, and $dir/dist/apple/ (screenshots in check/)"
+  echo "  A Mac: the .dmg (right click > Open the first time). iPhone / iPad: the .ipa, signed with an Apple account (docs/apple.md)." >&2
+}
+
+# the game as one executable (tools/standalone.sh in docker/standalone): StaticPHP's micro (PHP + SDL, OpenGL, OpenAL)
+# + the game as a PHAR. The micro binaries are kept in ~/.jumphp/standalone (downloaded from JumPHP's releases, or
+# built here for Linux: ~15 min once)
+cmd_export_standalone() {
+  local game="${1:-}"; local dir; dir="$(game_dir "$game")"; shift
+  local targets=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --linux) targets+=(linux-x86_64) ;;
+      --windows) targets+=(windows-x86_64) ;;
+      *) die "unknown option $1 (--linux, --windows)" ;;
+    esac
+    shift
+  done
+  [ ${#targets[@]} -gt 0 ] || targets=(linux-x86_64)
+  ensure_vendor "$dir"
+  local home="${JUMPHP_HOME:-$HOME/.jumphp}" image="${JUMPHP_STANDALONE_IMAGE:-jumphp/standalone:dev}" target out log
+  mkdir -p "$home/standalone"
+  docker image inspect "$image" >/dev/null 2>&1 || { say "building $image (first time, ~3 min)"; docker build -t "$image" docker/standalone; }
+  for target in "${targets[@]}"; do
+    log="$(mktemp)"
+    docker run --rm $TTY_FLAGS --user "$(id -u):$(id -g)" -v "$ROOT:/workspace" -v "$home/standalone:/cache" \
+      -e HOME=/tmp -e GAME="$game" -e TARGET="$target" -e JUMPHP_STANDALONE_PHP -e JUMPHP_STANDALONE_BUILD \
+      "$image" bash /workspace/tools/standalone.sh | tee "$log"
+    out="$(sed -n 's/^OUT=//p' "$log")"; rm -f "$log"
+    [ -n "$out" ] || die "no executable for $target (see above)"
+    say "done: ${out#/workspace/} ($(du -h "$ROOT/${out#/workspace/}" | cut -f1))"
+  done
+  echo "  One file to give: the player runs it (Linux: chmod +x first if it was downloaded). The first launch unpacks" >&2
+  echo "  the game in the player's cache; saves and options go to their data folder (docs/standalone.md)." >&2
 }
 
 # the `jumphp` command for the whole system (tools/jumphp-cli): `jumphp test pong` from any folder of a project,
@@ -791,7 +1061,12 @@ main() {
     webshot) cmd_webshot "$@" ;;
     relay) cmd_relay "$@" ;;
     export:desktop) cmd_export_desktop "$@" ;;
+    export:standalone) cmd_export_standalone "$@" ;;
     twa) cmd_twa "$@" ;;
+    android) cmd_android "$@" ;;
+    apple) cmd_apple "$@" ;;
+    ios) local g="${1:-}"; shift || true; cmd_apple "$g" --ios "$@" ;;
+    macos) local g="${1:-}"; shift || true; cmd_apple "$g" --macos "$@" ;;
     deploy) cmd_deploy "$@" ;;
     pages) cmd_pages "$@" ;;
     lint) cmd_lint ;;

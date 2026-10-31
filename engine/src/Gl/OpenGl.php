@@ -52,6 +52,7 @@ class OpenGl extends EventEmitter
     private ?array $target = null;
     private int $supersample = 1;
     private ?bool $swapsRedBlue = null;
+    private ?bool $legacyGlsl = null;
 
     public function __construct(private Sdl $sdl)
     {
@@ -177,7 +178,7 @@ class OpenGl extends EventEmitter
         $ok = true;
         foreach ([GL_VERTEX_SHADER => $vertex, GL_FRAGMENT_SHADER => $fragment] as $type => $source) {
             $shader = glCreateShader($type);
-            $source = self::versioned($source);
+            $source = self::versioned($source, $this->legacyGlsl());
             glShaderSource($shader, 1, $source, 0);
             if (!@glCompileShader($shader)) {
                 $this->fail(($type === GL_VERTEX_SHADER ? 'vertex' : 'fragment') . ' shader: ' . trim(glGetShaderInfoLog($shader) ?: 'compile error'));
@@ -251,7 +252,7 @@ class OpenGl extends EventEmitter
      */
     public function texture(string $path, bool $smooth = false, bool $repeat = false): int
     {
-        $file = str_starts_with($path, '/') ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
+        $file = \JumPHP\Kernel\Platform::isAbsolutePath($path) ? $path : (\defined('JUMPHP_ROOT') ? JUMPHP_ROOT . '/' : '') . $path;
         $data = @file_get_contents($file);
         $image = $data === false ? false : @imagecreatefromstring($data);
         if ($image === false) {
@@ -570,10 +571,24 @@ class OpenGl extends EventEmitter
 
     // ---------------------------------------------------------------------------------------------
 
-    /** `#version 100` first when the source has no #version (blank lines and comments before it are kept). */
-    public static function versioned(string $source): string
+    /**
+     * `#version 100` first when the source has no #version (blank lines and comments before it are kept).
+     * $legacy: a desktop GL that knows no GLSL ES (macOS: OpenGL 2.1), the same shader as GLSL 1.20 (no precision).
+     */
+    public static function versioned(string $source, bool $legacy = false): string
     {
-        return preg_match('/^\s*#version/m', $source) ? $source : "#version 100\n" . $source;
+        $source = preg_match('/^\s*#version/m', $source) ? $source : "#version 100\n" . $source;
+        if ($legacy) {
+            $source = (string)preg_replace('/^([ \t]*)#version 100\b[^\n]*/m', "\$1#version 120\n#define lowp\n#define mediump\n#define highp", $source, 1);
+            $source = (string)preg_replace('/^[ \t]*precision\s+(lowp|mediump|highp)\s+\w+\s*;[ \t]*$/m', '', $source);
+        }
+        return $source;
+    }
+
+    /** macOS' OpenGL (2.1 with SDL's renderer) compiles GLSL 1.20, not GLSL ES 1.00 as Mesa, Android, iOS and WebGL do. */
+    private function legacyGlsl(): bool
+    {
+        return $this->legacyGlsl ??= PHP_OS_FAMILY === 'Darwin' && !str_contains((string)glGetString(GL_VERSION), 'OpenGL ES');
     }
 
     /** @param float[] $data */

@@ -91,7 +91,7 @@ class Engine extends EventEmitter
     {
         $c = $this->config;
         $fullscreen = (bool)$this->options->get('fullscreen', $c->get('fullscreen'));
-        $this->sdl->initSDL($fullscreen && Platform::isDesktop(), $c->title(), $c->width(), $c->height(),
+        $this->sdl->initSDL(($fullscreen && Platform::isDesktop()) || Platform::isPhoneApp(), $c->title(), $c->width(), $c->height(),
             (bool)$c->get('vsync'), (int)$c->get('scale'));
         $this->sdl->getRenderer()->setIntegerScale((bool)$c->get('integer_scale', false));
 
@@ -105,6 +105,13 @@ class Engine extends EventEmitter
         $this->actions->load($c->file('input.yaml')['actions'] ?? []);
         $this->input->on('quit', fn () => $this->quit());
         $this->input->on('key', fn (int $key) => $this->globalKey($key));
+        if (!Platform::isWasm() && Platform::setting('JUMPHP_TOUCH_CONTROLS')) {
+            // the native Android / iOS app: the on-screen controls of the browser version (engine/web/touch.js), drawn here
+            $controls = new \JumPHP\Input\TouchControls($this->input->getKeyboard(), $this->input->getMouse(), $this->input,
+                (array)$c->get('touch', []), $this->font());
+            $this->input->setControls($controls);
+            $this->sdl->getRenderer()->addOverlay([$controls, 'draw']);
+        }
 
         $this->lang->setLang((string)$this->options->get('lang', $c->lang()));
         $this->debug = (bool)Platform::setting('JUMPHP_DEBUG', false);

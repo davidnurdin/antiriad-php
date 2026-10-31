@@ -66,6 +66,10 @@ class Sdl
             return;
         }
 
+        if (Platform::isPhoneApp()) {
+            // the game's shape (as the manifest's / Info.plist's): without it SDL lets a resizable window turn every way
+            \SDL_SetHint('SDL_IOS_ORIENTATIONS', $width >= $height ? 'LandscapeLeft LandscapeRight' : 'Portrait PortraitUpsideDown');
+        }
         $this->window = new Window($width * $scale, $height * $scale, $title, $fullscreen);
         $this->renderer = new Renderer($this->window->getWindow(), $width, $height, $vsync);
     }
@@ -338,7 +342,7 @@ class Sdl
 
     private function resolve(string $path): string
     {
-        return str_starts_with($path, '/') ? $path : $this->config->path($path);
+        return \JumPHP\Kernel\Platform::isAbsolutePath($path) ? $path : $this->config->path($path);
     }
 
     public function quit(): void

@@ -1,0 +1,23 @@
+# https-check: hello-world that checks HTTPS when its title screen opens (the native Android app, the standalone
+# executables: PHP's openssl and the game's CA certificates). Every key is optional (GameConfig::DEFAULTS).
+game:
+  id: https-check
+  title: "HTTPS CHECK"
+  version: 1.0.0
+  description: "Checks HTTPS where the game runs: an ssl:// connection and an https:// request to jumphp.net."
+  descriptions:                 # the description in the playground's languages (jumphp.net shows the visitor's)
+    fr: "Vérifie HTTPS là où le jeu tourne : une connexion ssl:// et une requête https:// vers jumphp.net."
+    en: "Checks HTTPS where the game runs: an ssl:// connection and an https:// request to jumphp.net."
+  width: 320                    # virtual resolution (pixels of the game, scaled to the window)
+  height: 180
+  scale: 3                      # desktop window = 960 x 540
+  background: [16, 16, 40]
+  start_scene: App\Scene\TitleScene
+  lang: en
+  controls: "Arrows: move the text · Space / Enter: a sound · Esc: back"
+  # the buttons of the phone's pad
+  touch: { a: Space, b: Escape, start: Return }
+  # what `bin/jumphp test` runs headless (no window), 600 frames = 10 s of game time
+  smoke:
+    scene: App\Scene\HelloScene
+    params: { demo: true }

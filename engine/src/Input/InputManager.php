@@ -12,6 +12,9 @@ use JumPHP\Renderer\Renderer;
  */
 class InputManager extends EventEmitter
 {
+    /** SDLK_AC_BACK: Android's back button (no constant in the binding) */
+    private const SDLK_AC_BACK = 0x4000010E;
+
     public function __construct(
         private Keyboard $keyboard,
         private Mouse $mouse,
@@ -21,8 +24,29 @@ class InputManager extends EventEmitter
     ) {
     }
 
+    private ?TouchControls $controls = null;
+
+    /** The engine's own on-screen controls (native Android app): they see the touches first. */
+    public function setControls(?TouchControls $controls): void
+    {
+        $this->controls = $controls;
+    }
+
+    public function getControls(): ?TouchControls
+    {
+        return $this->controls;
+    }
+
+    /** A key going down as if typed (on-screen buttons): held until Keyboard::up(). */
+    public function pressKey(int $key): void
+    {
+        $this->keyboard->down($key);
+        $this->emit('key', [$key]);
+    }
+
     public function poll(?Renderer $renderer = null): void
     {
+        $this->controls?->beforeEvents();
         $event = new \SDL_Event();
         while (\SDL_PollEvent($event)) {
             switch ($event->type) {
@@ -30,11 +54,20 @@ class InputManager extends EventEmitter
                     $this->emit('quit');
                     break;
                 case \SDL_KEYDOWN:
-                    $this->keyboard->handle($event);
-                    $this->emit('key', [$event->key->keysym->sym]);
-                    break;
                 case \SDL_KEYUP:
-                    $this->keyboard->handle($event);
+                    $sym = $event->key->keysym->sym;
+                    if ($sym === self::SDLK_AC_BACK) {
+                        // Android's back button (or gesture): Escape, the key of back / pause in every game
+                        $sym = \SDLK_ESCAPE;
+                    }
+                    if ($event->type === \SDL_KEYUP) {
+                        $this->keyboard->up($sym);
+                    } elseif ($sym === $event->key->keysym->sym) {
+                        $this->keyboard->handle($event);
+                        $this->emit('key', [$sym]);
+                    } elseif (!$this->keyboard->isKeyHeld($sym)) {
+                        $this->pressKey($sym);
+                    }
                     break;
                 case \SDL_MOUSEMOTION:
                     if ($event->motion !== null) {
@@ -59,7 +92,7 @@ class InputManager extends EventEmitter
                 case \SDL_FINGERDOWN:
                 case \SDL_FINGERUP:
                 case \SDL_FINGERMOTION:
-                    if ($event->tfinger !== null) {
+                    if ($event->tfinger !== null && !($renderer !== null && $this->controls?->handle($event, $renderer))) {
                         $this->touch->handle($event);
                     }
                     break;

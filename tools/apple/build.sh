@@ -141,7 +141,7 @@ build_php() {
   # the key: what makes PHP (versions, the extensions' config.m4, the functions php_tree, target and build_php)
   local key; key="$( { echo "$PHP_VERSION $LIBPNG_VERSION $OPENSSL_VERSION $MESA_VERSION $(xcrun --sdk "$SDK" --show-sdk-version)";
     cat "$ROOT"/tools/android/ext/*.m4 "$ROOT/docker/ext/php-opengl.patch" "$REGISTRY/functions.php";
-    declare -f php_tree target build_php; case "$SDK" in iphone*) declare -f ios_configure ;; esac; } | sha | cut -c1-12)"
+    declare -f php_tree target build_php; if [ "${SDK#iphone}" != "$SDK" ]; then declare -f ios_configure; fi; } | sha | cut -c1-12)"
   local out="$CACHE/php/$t-$key"
   [ -f "$out/lib/libphp.a" ] && { ln -sfn "$(basename "$out")" "$CACHE/php/$t"; return 0; }
   php_tree

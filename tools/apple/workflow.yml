@@ -60,15 +60,32 @@ jobs:
           test -d "games/$GAME" || { echo "no games/$GAME"; exit 1; }
           composer install -d "games/$GAME" --no-dev --no-interaction --no-progress --ignore-platform-reqs
 
-      # PHP per target and the sources: kept between runs (a first build ~40 min, then ~10)
-      - uses: actions/cache@v4
+      # PHP per target and the sources: kept between runs (a first build ~40 min, then ~10), even when a later step
+      # fails (what was built is kept)
+      - uses: actions/cache/restore@v4
         with:
-          path: ~/.jumphp/apple
-          key: apple-${{ hashFiles('tools/apple/build.sh', 'tools/android/ext/**', 'docker/standalone/registry/**', 'docker/ext/php-opengl.patch') }}
+          path: |
+            ~/.jumphp/apple/downloads
+            ~/.jumphp/apple/src
+            ~/.jumphp/apple/include
+            ~/.jumphp/apple/php
+            ~/.jumphp/apple/php-tree
+          key: apple-${{ github.run_id }}
           restore-keys: apple-
 
       - name: Build (PHP + SDL + the game; macOS arm64 + x86_64, iPhone, simulator)
         run: bash tools/apple/build.sh
+
+      - if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.jumphp/apple/downloads
+            ~/.jumphp/apple/src
+            ~/.jumphp/apple/include
+            ~/.jumphp/apple/php
+            ~/.jumphp/apple/php-tree
+          key: apple-${{ github.run_id }}
 
       - name: Check (macOS headless, the iPhone simulator)
         run: bash tools/apple/check.sh "$GAME" "$PLATFORMS"

@@ -207,7 +207,7 @@ build_app() {
   local t="$1" build="$CACHE/app/$GAME/$1"
   target "$t"
   say "the app for $t"
-  rm -rf "$build"
+  rm -rf "$build" && mkdir -p "$(dirname "$build")"
   cmake -S "$HERE/project" -B "$build" $CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DJUMPHP_SRC="$SRC" \
     -DJUMPHP_PHP="$CACHE/php/$t" -DJUMPHP_GAME_ID="$ID" > "$build.cmake.out" 2>&1 \
     || { tail -40 "$build.cmake.out"; die "CMake failed for $t"; }

@@ -134,6 +134,7 @@ games/<id>/
 | `bin/jumphp relay up\|down\|logs` | multiplayer relay server on `ws://localhost:8090/ws` |
 | `bin/jumphp export:desktop <id>` | a Docker image that runs the game |
 | `bin/jumphp export:standalone <id> [--linux] [--windows]` | the game as one executable for players (dist/standalone/; docs/standalone.md) |
+| `bin/jumphp apple <id>` (`ios <id>`, `macos <id>`) | the game as native Apple apps, built and tried on GitHub's Macs: .dmg (Mac), .ipa (iPhone / iPad), the simulator's app, screenshots (§14, "Apple apps") |
 | `bin/jumphp deploy [id...]` | to the project's server (`.env` `JUMPHP_SERVER`, set by `deploy:setup`): builds, rsync, `docker compose up` (FrankenPHP, or Traefik + FrankenPHP), a game with its own web site (`games/<id>/site/index.html`) gets it at the root and the game in `/play/` (`{{DOMAIN}}` replaced in its pages), then checks that `https://<domain>/` answers (shows the server logs if not). Behind a Traefik already on the server: `bin/jumphp server:traefik` prints its entry points and resolver (`JUMPHP_SERVER_MODE` `traefik-external`, or `traefik-passthrough` when it has no working resolver). Without a server: rsync `dist/web` to `$JUMPHP_DEPLOY_TARGET/<id>/`. Publishing: only when asked |
 | `bin/jumphp update` | merges the newest JumPHP (git remote `jumphp`) into the project |
 | `bin/jumphp cli:install` / `cli:uninstall` | the `jumphp` command for the whole system (`~/.local/bin/jumphp`, `tools/jumphp-cli`): `jumphp <command>` from any folder of a project, `jumphp new <folder>`, and once a day a question when Packagist has a newer JumPHP (`bin/jumphp update` on a yes) |
@@ -923,6 +924,22 @@ Then:
   `update_project` too, store listing with `bin/jumphp shot` screenshots);
 - a new version of the app (name, icon): `bin/jumphp twa <id>` again (versionCode + 1). The game itself updates
   with the site, no new app needed.
+
+### Apple apps (macOS, iPhone / iPad)
+
+When the user wants the game on a Mac, an iPhone or an iPad as an app ("an app for iOS", "on the App Store", "a Mac
+app"): `bin/jumphp apple <id>` (or `ios <id>` / `macos <id>`; docs/apple.md). Xcode is needed, so GitHub builds them
+on one of its Macs: the command writes `games/<id>/apple/app.json` (in git: bundle identifier asked the first time,
+build + 1, version), puts `.github/workflows/apple.yml` in the project, pushes after the user's yes, runs it and
+downloads `games/<id>/dist/apple/`: `<id>-<v>-macos.dmg` / `.zip` (Apple silicon + Intel), `<id>-<v>-ios.ipa`,
+`<id>-<v>-ios-simulator.zip`, and `check/macos.png` (the Mac app ran the game headless) / `check/ios.png` (the app in an
+iPhone simulator): **open the two screenshots** and check the game is there. First build ~40 min (run it in the
+background), then ~10.
+- without an Apple developer account (99 $ a year) the apps are signed ad hoc: a Mac opens it after right click > Open;
+  an iPhone installs nothing unsigned (the simulator's app and the web version in the meantime). Signing, notarization
+  and TestFlight come with the account (docs/apple.md): never ask for or store Apple credentials yourself;
+- in the app: `JUMPHP_IOS` (Platform::isPhoneApp(), touch controls, the game's orientation) or `JUMPHP_MACOS`; SDL on
+  OpenGL ES 2 (iOS) / OpenGL (macOS: the engine turns GLSL ES 1.00 into GLSL 1.20 itself).
 
 ## 15. Reference
 

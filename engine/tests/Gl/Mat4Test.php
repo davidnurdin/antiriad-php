@@ -52,4 +52,14 @@ final class Mat4Test extends TestCase
         self::assertSame("#version 100\nvoid main() {}", OpenGl::versioned("#version 100\nvoid main() {}"));
         self::assertSame("// x\n#version 300 es\n", OpenGl::versioned("// x\n#version 300 es\n"));
     }
+
+    public function testShadersForMacosOpenGl(): void
+    {
+        $fragment = "precision mediump float;\nvarying mediump vec2 v_uv;\nvoid main() { gl_FragColor = vec4(v_uv, 0.0, 1.0); }";
+        self::assertSame("#version 120\n#define lowp\n#define mediump\n#define highp\n\nvarying mediump vec2 v_uv;\n"
+            . "void main() { gl_FragColor = vec4(v_uv, 0.0, 1.0); }", OpenGl::versioned($fragment, true));
+        self::assertSame("// x\n#version 120\n#define lowp\n#define mediump\n#define highp\nvoid main() {}",
+            OpenGl::versioned("// x\n#version 100\nvoid main() {}", true));
+        self::assertSame("#version 300 es\n", OpenGl::versioned("#version 300 es\n", true));
+    }
 }

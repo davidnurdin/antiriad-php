@@ -66,8 +66,8 @@ class Sdl
             return;
         }
 
-        if (Platform::setting('JUMPHP_ANDROID')) {
-            // the game's shape (as the manifest's): without it SDL lets a resizable window turn every way
+        if (Platform::isPhoneApp()) {
+            // the game's shape (as the manifest's / Info.plist's): without it SDL lets a resizable window turn every way
             \SDL_SetHint('SDL_IOS_ORIENTATIONS', $width >= $height ? 'LandscapeLeft LandscapeRight' : 'Portrait PortraitUpsideDown');
         }
         $this->window = new Window($width * $scale, $height * $scale, $title, $fullscreen);

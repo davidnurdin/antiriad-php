@@ -15,5 +15,7 @@ rm -rf "$dest" && mkdir -p "$dest"
     --exclude='./vendor/jumphp/engine/vendor' --exclude='./vendor/jumphp/engine/.phpunit.cache' --exclude='*.md' . ) \
   | tar -x -C "$dest"
 mkdir -p "$dest/var"
-if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp /etc/ssl/certs/ca-certificates.crt "$dest/cacert.pem"; fi
-(cd "$dest" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)
+if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cp /etc/ssl/certs/ca-certificates.crt "$dest/cacert.pem"
+elif [ -f /etc/ssl/cert.pem ]; then cp /etc/ssl/cert.pem "$dest/cacert.pem"; fi # macOS (the Apple apps' build)
+sha=(sha256sum); command -v sha256sum >/dev/null || sha=(shasum -a 256) # macOS
+(cd "$dest" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 "${sha[@]}" | "${sha[@]}" | cut -c1-12)

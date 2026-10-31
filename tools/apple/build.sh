@@ -129,6 +129,11 @@ php_tree() {
   touch "$tree/.done"
 }
 
+# what iOS (device and simulator) needs more than macOS, in PHP's configure: no PCRE JIT (no executable memory)
+ios_configure() {
+  case "$SDK" in iphoneos|iphonesimulator) echo "--without-pcre-jit" ;; esac
+}
+
 # build_php <target>: $CACHE/php/<target>/lib/libphp.a (+ libpng16.a, libssl.a, libcrypto.a) and include/php
 build_php() {
   local t="$1"
@@ -136,7 +141,7 @@ build_php() {
   # the key: what makes PHP (versions, the extensions' config.m4, the functions php_tree, target and build_php)
   local key; key="$( { echo "$PHP_VERSION $LIBPNG_VERSION $OPENSSL_VERSION $MESA_VERSION $(xcrun --sdk "$SDK" --show-sdk-version)";
     cat "$ROOT"/tools/android/ext/*.m4 "$ROOT/docker/ext/php-opengl.patch" "$REGISTRY/functions.php";
-    declare -f php_tree target build_php; } | sha | cut -c1-12)"
+    declare -f php_tree target build_php; case "$SDK" in iphone*) declare -f ios_configure ;; esac; } | sha | cut -c1-12)"
   local out="$CACHE/php/$t-$key"
   [ -f "$out/lib/libphp.a" ] && { ln -sfn "$(basename "$out")" "$CACHE/php/$t"; return 0; }
   php_tree
@@ -170,7 +175,7 @@ build_php() {
       --enable-embed=static --disable-cli --disable-cgi --disable-phpdbg --disable-fpm --without-pear --without-iconv \
       --disable-all --disable-opcache-jit --with-zlib --enable-ctype --enable-tokenizer --enable-filter \
       --enable-mbstring --disable-mbregex --enable-sockets --enable-phar --enable-gd --enable-bcmath --with-openssl \
-      --enable-sdl --enable-sdl_image --enable-sdl_mixer --enable-sdl_ttf --enable-opengl --enable-openal \
+      --enable-sdl --enable-sdl_image --enable-sdl_mixer --enable-sdl_ttf --enable-opengl --enable-openal $(ios_configure) \
       > "$build/configure.out" 2>&1 || { tail -40 "$build/configure.out"; die "PHP's configure failed for $t"; }
     make -j"$JOBS" > "$build/make.out" 2>&1 || { grep -E "error|Error" "$build/make.out" | head -40; die "PHP failed to build for $t"; }
     make install-headers install-sapi > /dev/null 2>&1 || true

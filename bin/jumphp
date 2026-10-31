@@ -559,8 +559,14 @@ cmd_apple() {
     fi
   fi
   say "GitHub builds the apps on a Mac ($bundle $version, build $build: $platforms): first time ~40 min, then ~10"
-  gh workflow run apple.yml -R "$repo" --ref "$branch" -f game="$game" -f bundle_id="$bundle" -f version="$version" \
-    -f build="$build" -f platforms="$platforms"
+  # a workflow just pushed for the first time: GitHub needs a few seconds to know it
+  local try
+  for try in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    gh workflow run apple.yml -R "$repo" --ref "$branch" -f game="$game" -f bundle_id="$bundle" -f version="$version" \
+      -f build="$build" -f platforms="$platforms" 2>/dev/null && break
+    [ "$try" = 12 ] && die "GitHub does not start the workflow apple.yml (gh workflow list -R $repo)"
+    sleep 5
+  done
   sleep 5
   local run; run="$(gh run list -R "$repo" --workflow apple.yml -L 1 --json databaseId -q '.[0].databaseId')"
   echo "  https://github.com/$repo/actions/runs/$run" >&2
